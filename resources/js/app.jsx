@@ -1,6 +1,7 @@
-import '@fontsource-variable/inter';
+import "@fontsource-variable/inter";
+import "../css/app.css";
 
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp } from "@inertiajs/react";
 
 createInertiaApp({
     strictMode: true,

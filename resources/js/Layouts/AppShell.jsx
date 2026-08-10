@@ -1,25 +1,37 @@
-import { Menu } from 'lucide-react';
+import { Link } from "@inertiajs/react";
+import { Menu } from "lucide-react";
 
 function SidebarNavigationItem({ item }) {
     const Icon = item.icon;
 
-    return (
-        <div
-            className={[
-                'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                item.active
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-white/65 hover:bg-white/5 hover:text-white',
-            ].join(' ')}
-        >
-            {Icon && (
-                <Icon className="size-4 shrink-0" />
-            )}
+    const classes = [
+        "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+        item.active
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "text-white/65 hover:bg-white/5 hover:text-white",
+        item.disabled ? "cursor-not-allowed opacity-40" : "",
+    ].join(" ");
 
-            <span className="truncate">
-                {item.label}
-            </span>
-        </div>
+    const content = (
+        <>
+            {Icon && <Icon className="size-4 shrink-0" />}
+
+            <span className="truncate">{item.label}</span>
+        </>
+    );
+
+    if (!item.href || item.disabled) {
+        return (
+            <div className={classes} aria-disabled="true">
+                {content}
+            </div>
+        );
+    }
+
+    return (
+        <Link href={item.href} className={classes}>
+            {content}
+        </Link>
     );
 }
 
@@ -29,7 +41,7 @@ export default function AppShell({
     pageDescription,
     headerActions,
     navigation = [],
-    navigationLabel = 'Navigasi',
+    navigationLabel = "Navigasi",
     workspaceLabel,
     user,
 }) {
@@ -39,9 +51,7 @@ export default function AppShell({
                 <div className="flex h-16 shrink-0 items-center border-b border-sidebar-border px-5">
                     <div className="flex min-w-0 items-center gap-3">
                         <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                            <span className="text-sm font-bold">
-                                S
-                            </span>
+                            <span className="text-sm font-bold">S</span>
                         </div>
 
                         <div className="min-w-0">
@@ -80,7 +90,7 @@ export default function AppShell({
                             <div className="space-y-1">
                                 {navigation.map((item) => (
                                     <SidebarNavigationItem
-                                        key={item.label}
+                                        key={item.href ?? item.label}
                                         item={item}
                                     />
                                 ))}
@@ -111,11 +121,11 @@ export default function AppShell({
                     ) : (
                         <div className="rounded-lg bg-white/5 px-3 py-3">
                             <p className="text-xs font-medium text-white/75">
-                                M00 Foundation
+                                SiagaPasok
                             </p>
 
                             <p className="mt-1 text-[11px] leading-4 text-white/40">
-                                Identity belum diaktifkan.
+                                Identitas pengguna tidak tersedia.
                             </p>
                         </div>
                     )}
@@ -159,9 +169,7 @@ export default function AppShell({
                     )}
                 </header>
 
-                <main className="p-6">
-                    {children}
-                </main>
+                <main className="p-6">{children}</main>
             </div>
         </div>
     );

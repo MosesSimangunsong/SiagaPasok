@@ -1,13 +1,5 @@
 import { Head } from "@inertiajs/react";
 import {
-    CircleAlert,
-    CircleCheck,
-    Palette,
-    ShieldCheck,
-    TriangleAlert,
-} from "lucide-react";
-
-import {
     Blocks,
     CircleAlert,
     CircleCheck,
