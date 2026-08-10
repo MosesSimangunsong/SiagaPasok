@@ -74,6 +74,22 @@ class Organization extends Model
     );
 }
 
+public function readinessChecklists(): HasMany
+{
+    return $this->hasMany(
+        ReadinessChecklist::class,
+        'organization_id'
+    );
+}
+
+public function documentRecords(): HasMany
+{
+    return $this->hasMany(
+        DocumentRecord::class,
+        'organization_id'
+    );
+}
+
     public function actorAuditLogs(): HasMany
     {
         return $this->hasMany(

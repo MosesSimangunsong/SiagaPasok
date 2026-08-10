@@ -70,6 +70,14 @@ class DemandForecast extends Model
     );
 }
 
+public function readinessChecklists(): HasMany
+{
+    return $this->hasMany(
+        ReadinessChecklist::class,
+        'forecast_id'
+    );
+}
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(
