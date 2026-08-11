@@ -10,6 +10,7 @@ use App\Models\FallbackOffer;
 use App\Models\FallbackRequest;
 use App\Models\ReadinessChecklist;
 use App\Models\SupplyCommitment;
+use App\Models\DemandForecast;
 
 final class OperationalNotificationService
 {
@@ -118,6 +119,106 @@ final class OperationalNotificationService
             );
     }
 }
+
+
+public function fallbackRequestApprovalRequired(
+    FallbackRequest $request,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpManagers(
+                $request
+                    ->requester_organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::APPROVAL_REQUIRED,
+
+                priority:
+                    NotificationPriority
+                        ::ACTION,
+
+                title:
+                    'Fallback Request perlu persetujuan',
+
+                message:
+                    'Fallback Request telah disubmit '
+                    .'dan menunggu keputusan '
+                    .'Manager requester.',
+
+                relatedEntity:
+                    $request,
+
+                actionUrl:
+                    '/kdkmp/manager/fallback-requests/'
+                    .$request->id,
+
+                deduplicationKey:
+                    'fallback-request:'
+                    .$request->id
+                    .':approval-required',
+            );
+    }
+}
+
+public function fallbackRequestOpened(
+    FallbackRequest $request,
+    DemandForecast $forecast,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->fallbackNetworkRecipients(
+                $forecast,
+                $request
+                    ->requester_organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::FALLBACK_REQUEST,
+
+                priority:
+                    NotificationPriority
+                        ::ACTION,
+
+                title:
+                    'Fallback Request baru tersedia',
+
+                message:
+                    'Kebutuhan fallback baru telah '
+                    .'dibuka untuk jaringan KDKMP. '
+                    .'Lihat detail broadcast untuk '
+                    .'menilai kapasitas yang dapat '
+                    .'ditawarkan.',
+
+                relatedEntity:
+                    $request,
+
+                actionUrl:
+                    '/kdkmp/fallback-network/'
+                    .$request->id,
+
+                deduplicationKey:
+                    'fallback-request:'
+                    .$request->id
+                    .':opened',
+            );
+    }
+}
+
 
     public function fallbackOfferDecisionRequired(
         FallbackOffer $offer,

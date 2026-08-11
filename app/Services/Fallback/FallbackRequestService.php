@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Models\FallbackOfferSource;
 use App\Services\Audit\AuditService;
 use App\Services\Supply\SupplyMetricsService;
+use App\Services\Notification\OperationalNotificationService;
 use App\Support\FixedScaleDecimal;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -56,9 +57,17 @@ private const AUDIT_OFFER_RELEASED =
     'FALLBACK_OFFER_RESERVE_RELEASED';
 
     public function __construct(
-    private readonly AuditService $auditService,
-    private readonly SupplyMetricsService $supplyMetrics,
-    private readonly FallbackReservationService $reservationService,
+    private readonly AuditService
+        $auditService,
+
+    private readonly SupplyMetricsService
+        $supplyMetrics,
+
+    private readonly FallbackReservationService
+        $reservationService,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
 ) {
 }
 
@@ -342,20 +351,25 @@ public function calculateRemainingVolume(
                 ]);
 
                 $this->auditService->record(
-                    actor: $actor,
-                    source: AuditSource::USER,
-                    action:
-                        self::AUDIT_SUBMITTED,
-                    entity: $currentRequest,
-                    previousValue: $before,
-                    newValue:
-                        $this->snapshot(
-                            $currentRequest
-                        ),
-                );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_SUBMITTED,
+    entity: $currentRequest,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentRequest
+        ),
+);
 
-                return $currentRequest
-                    ->refresh()
+$this->operationalNotificationService
+    ->fallbackRequestApprovalRequired(
+        $currentRequest
+    );
+
+return $currentRequest
+    ->refresh()
                     ->load([
                         'forecast',
                         'requesterOrganization',
@@ -481,20 +495,33 @@ public function calculateRemainingVolume(
                 ]);
 
                 $this->auditService->record(
-                    actor: $actor,
-                    source: AuditSource::USER,
-                    action:
-                        self::AUDIT_OPENED,
-                    entity: $currentRequest,
-                    previousValue: $before,
-                    newValue:
-                        $this->snapshot(
-                            $currentRequest
-                        ),
-                );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_OPENED,
+    entity: $currentRequest,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentRequest
+        ),
+);
 
-                return $currentRequest
-                    ->refresh()
+/*
+ * Broadcast notification hanya dijadwalkan
+ * setelah Request benar-benar OPEN.
+ *
+ * NotificationService akan persist setelah
+ * outer transaction berhasil commit.
+ */
+$this->operationalNotificationService
+    ->fallbackRequestOpened(
+        $currentRequest,
+        $forecast
+    );
+
+return $currentRequest
+    ->refresh()
                     ->load([
                         'forecast',
                         'requesterOrganization',
