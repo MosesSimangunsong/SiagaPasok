@@ -19,6 +19,26 @@ Schedule::command(
     ->withoutOverlapping();
 
 /*
+ * Materialize lifecycle Fallback berbasis waktu.
+ *
+ * Offer:
+ * T >= expires_at
+ *     -> AVAILABLE dapat menjadi EXPIRED.
+ *
+ * Request:
+ * T > response_deadline_at
+ *     -> OPEN dapat menjadi EXPIRED.
+ *
+ * Domain service tetap menjadi authority atas
+ * transition dan reserve release.
+ */
+Schedule::command(
+    'fallback:evaluate-expiry'
+)
+    ->everyMinute()
+    ->withoutOverlapping();
+
+/*
  * Materialize Document Record time expiry.
  *
  * Canonical Document Readiness tetap server-derived
@@ -39,6 +59,9 @@ Schedule::command(
  * Periodic observer terutama menangkap transition
  * berbasis waktu dan menjadi retry safety net untuk
  * derived Shortfall/RFP observation.
+ *
+ * Diletakkan setelah lifecycle jobs agar evaluation
+ * periodik membaca state temporal terbaru.
  */
 Schedule::command(
     'forecasts:observe-derived-state'
