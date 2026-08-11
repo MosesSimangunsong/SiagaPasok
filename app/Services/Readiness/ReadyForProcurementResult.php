@@ -16,6 +16,10 @@ final readonly class ReadyForProcurementResult
         public CarbonImmutable $evaluatedAt,
         public bool $forecastPublished,
         public bool $operationallyValid,
+        public string $demandTarget,
+        public ?string $totalSafeSupply,
+        public ?string $coveragePercent,
+        public ?string $shortfall,
         public bool $volumeReady,
         public array $contributorOrganizationIds,
         public array $contributorReadinessResults,
@@ -46,6 +50,18 @@ final readonly class ReadyForProcurementResult
 
             'operationally_valid' =>
                 $this->operationallyValid,
+
+            'demand_target' =>
+                $this->demandTarget,
+
+            'total_safe_supply' =>
+                $this->totalSafeSupply,
+
+            'coverage_percent' =>
+                $this->coveragePercent,
+
+            'shortfall' =>
+                $this->shortfall,
 
             'volume_ready' =>
                 $this->volumeReady,

@@ -23,6 +23,7 @@ import {
 export default function Readiness({
     forecast,
     supply,
+    procurement,
     contributors,
 }) {
     return (
@@ -51,6 +52,12 @@ export default function Readiness({
                 }
             >
                 <div className="space-y-6">
+                  <ProcurementStatusPanel
+    procurement={procurement}
+    contributorCount={
+        contributors.length
+    }
+/>
                     <div className="grid gap-4 md:grid-cols-3">
                         <SummaryCard
                             label="Volume Ready"
@@ -71,10 +78,15 @@ export default function Readiness({
 
                         <SummaryCard
                             label="Coverage"
-                            value={`${formatNumber(
-                                supply.coverage_percent,
-                                2,
-                            )}%`}
+                            value={
+    supply.coverage_percent ===
+    null
+        ? "—"
+        : `${formatNumber(
+              supply.coverage_percent,
+              2,
+          )}%`
+}
                             description={`Target ${formatNumber(
                                 forecast.target_volume,
                             )} ${forecast.unit.symbol}`}
@@ -96,7 +108,8 @@ export default function Readiness({
                         />
                     </div>
 
-                    {!supply.volume_ready && (
+                    {!supply.volume_ready &&
+    supply.shortfall !== null && (
                         <Card className="border-amber-500/30">
                             <CardContent>
                                 <div className="flex items-start gap-3">
@@ -232,6 +245,154 @@ export default function Readiness({
                 </div>
             </SppgLayout>
         </>
+    );
+}
+
+function ProcurementStatusPanel({
+    procurement,
+    contributorCount,
+}) {
+    const ready =
+        procurement.ready_for_procurement;
+
+    const reasonCodes =
+        procurement.reason_codes ?? [];
+
+    return (
+        <Card
+            className={
+                ready
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-amber-500/30"
+            }
+        >
+            <CardContent>
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="flex items-start gap-3">
+                        <div
+                            className={[
+                                "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                                ready
+                                    ? "bg-primary/10 text-primary"
+                                    : "bg-amber-500/10 text-amber-700",
+                            ].join(" ")}
+                        >
+                            {ready ? (
+                                <CheckCircle2 className="size-5" />
+                            ) : (
+                                <AlertTriangle className="size-5" />
+                            )}
+                        </div>
+
+                        <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Derived Status
+                            </p>
+
+                            <h2 className="mt-1 text-xl font-semibold text-foreground">
+                                {ready
+                                    ? "READY FOR PROCUREMENT"
+                                    : "BELUM READY FOR PROCUREMENT"}
+                            </h2>
+
+                            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                                {ready
+                                    ? `Volume telah terpenuhi dan seluruh ${contributorCount} contributor efektif memiliki Logistics dan Document Readiness yang valid. Forecast siap diteruskan ke proses procurement resmi di luar SiagaPasok.`
+                                    : "Status ini dihitung otomatis dari current Safe Supply dan readiness seluruh contributor efektif. Tidak ada user yang menetapkan status ini secara manual."}
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="grid shrink-0 gap-2 sm:grid-cols-3">
+                        <DerivedGate
+                            label="Volume"
+                            ready={
+                                procurement.volume_ready
+                            }
+                        />
+
+                        <DerivedGate
+                            label="Logistics"
+                            ready={
+                                procurement
+                                    .all_contributors_logistics_ready
+                            }
+                        />
+
+                        <DerivedGate
+                            label="Document"
+                            ready={
+                                procurement
+                                    .all_contributors_document_ready
+                            }
+                        />
+                    </div>
+                </div>
+
+                {reasonCodes.length > 0 && (
+                    <div className="mt-5 border-t pt-4">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Blocker saat ini
+                        </p>
+
+                        <div className="mt-2 flex flex-wrap gap-2">
+                            {reasonCodes.map(
+                                (reason) => (
+                                    <span
+                                        key={
+                                            reason
+                                        }
+                                        className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                    >
+                                        {procurementReasonLabel(
+                                            reason,
+                                        )}
+                                    </span>
+                                ),
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <p className="mt-4 text-xs text-muted-foreground">
+                    Dihitung otomatis{" "}
+                    {formatDateTime(
+                        procurement.evaluated_at,
+                    )}
+                    . Status dapat kembali menjadi
+                    belum ready apabila supply,
+                    Forecast, logistics, atau
+                    dokumen berubah.
+                </p>
+            </CardContent>
+        </Card>
+    );
+}
+
+function DerivedGate({
+    label,
+    ready,
+}) {
+    return (
+        <div className="flex min-w-32 items-center gap-2 rounded-lg border bg-background px-3 py-2">
+            {ready ? (
+                <CheckCircle2 className="size-4 shrink-0 text-primary" />
+            ) : (
+                <CircleMinus className="size-4 shrink-0 text-muted-foreground" />
+            )}
+
+            <div>
+                <p className="text-xs text-muted-foreground">
+                    {label}
+                </p>
+
+                <p className="text-sm font-medium text-foreground">
+                    {ready
+                        ? "Ready"
+                        : "Belum Ready"}
+                </p>
+            </div>
+        </div>
     );
 }
 
@@ -399,6 +560,56 @@ function EmptyContributors() {
         </div>
     );
 }
+
+
+function procurementReasonLabel(code) {
+    const labels = {
+        FORECAST_NOT_PUBLISHED:
+            "Forecast belum dipublikasikan",
+
+        FORECAST_WINDOW_ENDED:
+            "Periode operasional Forecast berakhir",
+
+        VOLUME_NOT_READY:
+            "Safe Supply belum memenuhi demand",
+
+        NO_EFFECTIVE_CONTRIBUTORS:
+            "Belum ada contributor efektif",
+
+        LOGISTICS_NOT_READY:
+            "Logistics contributor belum lengkap",
+
+        DOCUMENT_NOT_READY:
+            "Document contributor belum lengkap",
+    };
+
+    return labels[code] ?? code;
+}
+
+function formatDateTime(value) {
+    if (!value) {
+        return "—";
+    }
+
+    const date = new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
+        return value;
+    }
+
+    return new Intl.DateTimeFormat(
+        "id-ID",
+        {
+            dateStyle: "medium",
+            timeStyle: "short",
+        },
+    ).format(date);
+}
+
 
 function reasonLabel(code) {
     const labels = {

@@ -42,14 +42,6 @@ final class ReadyForProcurementEvaluationService
         DemandForecast $forecast,
         ?CarbonInterface $evaluatedAt = null,
     ): ReadyForProcurementResult {
-        /*
-         * Satu evaluation instant untuk seluruh
-         * derived calculation.
-         *
-         * Supply, contributor membership, Logistics,
-         * dan Document readiness tidak boleh memakai
-         * clock instant yang berbeda.
-         */
         $evaluationTime =
             $evaluatedAt === null
                 ? CarbonImmutable::now()
@@ -76,17 +68,10 @@ final class ReadyForProcurementEvaluationService
             $connection->getDriverName();
 
         /*
-         * PostgreSQL M09 membutuhkan satu stable
-         * snapshot.
-         *
-         * Jika caller sudah membuka transaction,
-         * service tidak dapat menaikkan isolation
-         * menjadi REPEATABLE READ dengan aman setelah
-         * transaction tersebut mungkin melakukan query.
-         *
-         * Fail explicitly daripada diam-diam
-         * menghasilkan consistency contract yang
-         * lebih lemah.
+         * PostgreSQL production/local operational
+         * evaluation harus membentuk snapshot
+         * sendiri agar seluruh M06 + M08 reads
+         * berasal dari satu consistent view.
          */
         if (
             $driver === 'pgsql'
@@ -101,12 +86,9 @@ final class ReadyForProcurementEvaluationService
         }
 
         /*
-         * SQLite :memory: pada regular test suite
-         * dapat sudah berada di transaction milik
-         * testing framework.
-         *
-         * Dalam kondisi tersebut kita gunakan
-         * transaction yang sudah aktif.
+         * Regular SQLite automated tests dapat
+         * sudah dibungkus transaction oleh
+         * RefreshDatabase.
          */
         if ($connection->transactionLevel() > 0) {
             return $this->evaluateCurrentState(
@@ -121,18 +103,6 @@ final class ReadyForProcurementEvaluationService
                 $forecast,
                 $evaluationTime
             ): ReadyForProcurementResult {
-                /*
-                 * Harus menjadi statement transaction
-                 * pertama sebelum query domain apa pun.
-                 *
-                 * READ ONLY:
-                 * evaluasi M09 tidak mempunyai side
-                 * effect.
-                 *
-                 * REPEATABLE READ:
-                 * seluruh M06 + M08 reads melihat
-                 * snapshot PostgreSQL yang konsisten.
-                 */
                 if (
                     $connection->getDriverName()
                     === 'pgsql'
@@ -156,12 +126,8 @@ final class ReadyForProcurementEvaluationService
         CarbonImmutable $evaluationTime,
     ): ReadyForProcurementResult {
         /*
-         * Jangan mempercayai model snapshot dari
-         * caller.
-         *
-         * Forecast dapat direvisi / ditutup /
-         * dibatalkan setelah model sebelumnya
-         * di-load.
+         * Resolve current persisted Forecast,
+         * bukan mempercayai stale caller model.
          */
         $currentForecast =
             DemandForecast::query()
@@ -181,26 +147,19 @@ final class ReadyForProcurementEvaluationService
                 )
             );
 
-        $prerequisiteReasons = [];
-
-        if (! $forecastPublished) {
-            $prerequisiteReasons[] =
-                self::REASON_FORECAST_NOT_PUBLISHED;
-        }
-
-        if (! $operationallyValid) {
-            $prerequisiteReasons[] =
-                self::REASON_FORECAST_WINDOW_ENDED;
-        }
+        $demandTarget =
+            (string)
+            $currentForecast->target_volume;
 
         /*
-         * M06 hanya menerima Forecast PUBLISHED.
+         * M06 intentionally hanya menerima
+         * Forecast PUBLISHED.
          *
-         * Jangan memanggil canonical supply calculator
-         * apabila prerequisite Forecast sendiri sudah
-         * tidak valid.
+         * Untuk state non-PUBLISHED, RFP langsung
+         * fail closed tanpa mencoba menciptakan
+         * pseudo supply metrics.
          */
-        if ($prerequisiteReasons !== []) {
+        if (! $forecastPublished) {
             return new ReadyForProcurementResult(
                 forecastId:
                     $currentForecast->id,
@@ -209,10 +168,22 @@ final class ReadyForProcurementEvaluationService
                     $evaluationTime,
 
                 forecastPublished:
-                    $forecastPublished,
+                    false,
 
                 operationallyValid:
                     $operationallyValid,
+
+                demandTarget:
+                    $demandTarget,
+
+                totalSafeSupply:
+                    null,
+
+                coveragePercent:
+                    null,
+
+                shortfall:
+                    null,
 
                 volumeReady:
                     false,
@@ -232,22 +203,17 @@ final class ReadyForProcurementEvaluationService
                 readyForProcurement:
                     false,
 
-                reasonCodes:
-                    $prerequisiteReasons,
+                reasonCodes: [
+                    self::REASON_FORECAST_NOT_PUBLISHED,
+                ],
             );
         }
 
         /*
          * SINGLE canonical M06 evaluation.
          *
-         * Jangan menghitung:
-         * - Safe Supply
-         * - Fallback Safe Supply
-         * - Shortfall
-         * - Volume Ready
-         * - Contributor Set
-         *
-         * di M09.
+         * Semua output supply yang dikonsumsi
+         * HTTP/UI harus berasal dari object ini.
          */
         $supplyMetrics =
             $this->supplyMetricsService
@@ -255,6 +221,63 @@ final class ReadyForProcurementEvaluationService
                     $currentForecast,
                     $evaluationTime
                 );
+
+        /*
+         * M06 sendiri sudah fail closed setelah
+         * required_end_at sehingga metrics di
+         * sini tetap canonical dan dapat
+         * ditampilkan tanpa perhitungan kedua.
+         */
+        if (! $operationallyValid) {
+            return new ReadyForProcurementResult(
+                forecastId:
+                    $currentForecast->id,
+
+                evaluatedAt:
+                    $evaluationTime,
+
+                forecastPublished:
+                    true,
+
+                operationallyValid:
+                    false,
+
+                demandTarget:
+                    $supplyMetrics->demandTarget,
+
+                totalSafeSupply:
+                    $supplyMetrics->totalSafeSupply,
+
+                coveragePercent:
+                    $supplyMetrics->coveragePercent,
+
+                shortfall:
+                    $supplyMetrics->shortfall,
+
+                volumeReady:
+                    false,
+
+                contributorOrganizationIds:
+                    $supplyMetrics
+                        ->contributorOrganizationIds,
+
+                contributorReadinessResults:
+                    [],
+
+                allContributorsLogisticsReady:
+                    false,
+
+                allContributorsDocumentReady:
+                    false,
+
+                readyForProcurement:
+                    false,
+
+                reasonCodes: [
+                    self::REASON_FORECAST_WINDOW_ENDED,
+                ],
+            );
+        }
 
         $contributorOrganizationIds =
             $supplyMetrics
@@ -264,11 +287,8 @@ final class ReadyForProcurementEvaluationService
             $contributorOrganizationIds !== [];
 
         /*
-         * Empty set tidak boleh dianggap
-         * "all contributors ready" secara vacuous.
-         *
-         * Foundation mempunyai gate eksplisit:
-         * ContributorSet harus non-empty.
+         * Empty contributor set tidak boleh
+         * menjadi TRUE melalui vacuous truth.
          */
         $allLogisticsReady =
             $hasContributors;
@@ -283,9 +303,10 @@ final class ReadyForProcurementEvaluationService
             as $organizationId
         ) {
             /*
-             * M08 tetap canonical authority.
+             * Canonical M08 evaluation.
              *
-             * evaluatedAt yang sama diteruskan.
+             * Gunakan evaluation instant yang
+             * sama dengan M06.
              */
             $readiness =
                 $this
@@ -299,15 +320,6 @@ final class ReadyForProcurementEvaluationService
             $contributorReadinessResults[] =
                 $readiness;
 
-            /*
-             * isContributor diperiksa kembali
-             * secara fail-closed.
-             *
-             * Dalam stable snapshot normal,
-             * organisasi dari canonical M06 set
-             * harus tetap contributor ketika
-             * M08 mengevaluasinya.
-             */
             if (
                 ! $readiness->isContributor
                 || ! $readiness->logisticsReady
@@ -353,9 +365,6 @@ final class ReadyForProcurementEvaluationService
                 self::REASON_DOCUMENT_NOT_READY;
         }
 
-        /*
-         * Authoritative M09 conjunction.
-         */
         $readyForProcurement =
             $supplyMetrics->volumeReady
             && $hasContributors
@@ -374,6 +383,18 @@ final class ReadyForProcurementEvaluationService
 
             operationallyValid:
                 true,
+
+            demandTarget:
+                $supplyMetrics->demandTarget,
+
+            totalSafeSupply:
+                $supplyMetrics->totalSafeSupply,
+
+            coveragePercent:
+                $supplyMetrics->coveragePercent,
+
+            shortfall:
+                $supplyMetrics->shortfall,
 
             volumeReady:
                 $supplyMetrics->volumeReady,

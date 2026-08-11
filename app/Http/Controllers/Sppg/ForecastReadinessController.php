@@ -5,8 +5,7 @@ namespace App\Http\Controllers\Sppg;
 use App\Http\Controllers\Controller;
 use App\Models\DemandForecast;
 use App\Models\Organization;
-use App\Services\Readiness\ReadinessEvaluationService;
-use App\Services\Supply\SupplyMetricsService;
+use App\Services\Readiness\ReadyForProcurementEvaluationService;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -14,8 +13,8 @@ use Inertia\Response;
 class ForecastReadinessController extends Controller
 {
     public function __construct(
-        private readonly SupplyMetricsService $supplyMetricsService,
-        private readonly ReadinessEvaluationService $readinessEvaluationService,
+        private readonly ReadyForProcurementEvaluationService
+            $readyForProcurementEvaluationService,
     ) {
     }
 
@@ -32,17 +31,37 @@ class ForecastReadinessController extends Controller
             'unit',
         ]);
 
-        $metrics =
-            $this->supplyMetricsService
-                ->calculate(
+        /*
+         * Single canonical M09 evaluation.
+         *
+         * Controller tidak menghitung ulang:
+         * - Safe Supply
+         * - Volume Ready
+         * - Contributor Set
+         * - Logistics Ready
+         * - Document Ready
+         * - Ready for Procurement
+         */
+        $evaluation =
+            $this
+                ->readyForProcurementEvaluationService
+                ->evaluate(
                     $forecast
                 );
 
+        /*
+         * Organization metadata bukan business
+         * readiness truth.
+         *
+         * SPPG hanya menerima organization-level
+         * identity, bukan producer/commitment/
+         * document evidence.
+         */
         $organizations =
             Organization::query()
                 ->whereIn(
                     'id',
-                    $metrics
+                    $evaluation
                         ->contributorOrganizationIds
                 )
                 ->get([
@@ -54,34 +73,27 @@ class ForecastReadinessController extends Controller
 
         $contributors =
             collect(
-                $metrics
-                    ->contributorOrganizationIds
+                $evaluation
+                    ->contributorReadinessResults
             )
                 ->map(
                     function (
-                        int $organizationId
+                        $readiness
                     ) use (
-                        $forecast,
                         $organizations
                     ): array {
                         $organization =
                             $organizations
                                 ->get(
-                                    $organizationId
-                                );
-
-                        $readiness =
-                            $this
-                                ->readinessEvaluationService
-                                ->evaluateContributor(
-                                    $forecast,
-                                    $organizationId
+                                    $readiness
+                                        ->organizationId
                                 );
 
                         return [
                             'organization' => [
                                 'id' =>
-                                    $organizationId,
+                                    $readiness
+                                        ->organizationId,
 
                                 'code' =>
                                     $organization
@@ -135,10 +147,13 @@ class ForecastReadinessController extends Controller
                                 ->name,
                     ],
 
+                    /*
+                     * Gunakan demand snapshot yang
+                     * sama dengan M09 evaluation.
+                     */
                     'target_volume' =>
-                        (string)
-                        $forecast
-                            ->target_volume,
+                        $evaluation
+                            ->demandTarget,
 
                     'unit' => [
                         'id' =>
@@ -165,20 +180,55 @@ class ForecastReadinessController extends Controller
 
                 'supply' => [
                     'total_safe_supply' =>
-                        $metrics
+                        $evaluation
                             ->totalSafeSupply,
 
                     'coverage_percent' =>
-                        $metrics
+                        $evaluation
                             ->coveragePercent,
 
                     'shortfall' =>
-                        $metrics
+                        $evaluation
                             ->shortfall,
 
                     'volume_ready' =>
-                        $metrics
+                        $evaluation
                             ->volumeReady,
+                ],
+
+                'procurement' => [
+                    'evaluated_at' =>
+                        $evaluation
+                            ->evaluatedAt
+                            ->toIso8601String(),
+
+                    'forecast_published' =>
+                        $evaluation
+                            ->forecastPublished,
+
+                    'operationally_valid' =>
+                        $evaluation
+                            ->operationallyValid,
+
+                    'volume_ready' =>
+                        $evaluation
+                            ->volumeReady,
+
+                    'all_contributors_logistics_ready' =>
+                        $evaluation
+                            ->allContributorsLogisticsReady,
+
+                    'all_contributors_document_ready' =>
+                        $evaluation
+                            ->allContributorsDocumentReady,
+
+                    'ready_for_procurement' =>
+                        $evaluation
+                            ->readyForProcurement,
+
+                    'reason_codes' =>
+                        $evaluation
+                            ->reasonCodes,
                 ],
 
                 'contributors' =>
