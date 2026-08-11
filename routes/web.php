@@ -50,6 +50,7 @@ use App\Http\Controllers\Demo\DemoFallbackRequestController;
 use App\Http\Controllers\Demo\DemoFallbackSourceController;
 use App\Http\Controllers\Demo\DemoFallbackOfferController;
 use App\Http\Controllers\Demo\DemoContributorReadinessController;
+use App\Http\Controllers\Demo\DemoResetController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -98,6 +99,33 @@ Route::post(
     ->middleware('demo')
     ->name('demo.switch-account');
 
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — Reset
+|--------------------------------------------------------------------------
+|
+| Reset hanya untuk deterministic demo dataset.
+|
+| Tidak:
+| - migrate:fresh
+| - truncate database global
+| - menghapus organization/user/master records non-demo
+|
+*/
+
+Route::post(
+    '/demo/reset',
+    DemoResetController::class
+)
+    ->middleware([
+        'demo',
+        'role:SPPG_USER',
+    ])
+    ->name(
+        'demo.reset'
+    );
+    
 
     /*
 |--------------------------------------------------------------------------
