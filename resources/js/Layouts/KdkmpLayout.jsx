@@ -10,8 +10,11 @@ import {
     FileCheck2,
     Files,
     Handshake,
+    LayoutDashboard,
     LogOut,
+    Network,
     RefreshCcw,
+    Send,
     Users,
 } from "lucide-react";
 
@@ -51,63 +54,95 @@ export default function KdkmpLayout({
         role === "KDKMP_MANAGER";
 
     const operatorNavigation = [
-        {
-            label: "Forecast Aktif",
-            href: "/kdkmp/forecasts",
-            icon: ClipboardList,
-            active: currentUrl.startsWith(
-                "/kdkmp/forecasts",
-            ),
-        },
-        {
-            label: "Produsen",
-            href: "/kdkmp/producers",
-            icon: Users,
-            active: currentUrl.startsWith(
-                "/kdkmp/producers",
-            ),
-        },
-        {
-            label: "Expected Harvest",
-            href: "/kdkmp/expected-harvests",
-            icon: CalendarDays,
-            active: currentUrl.startsWith(
-                "/kdkmp/expected-harvests",
-            ),
-        },
-        {
-            label: "Komitmen Pasokan",
-            href: "/kdkmp/commitments",
-            icon: Handshake,
-            active: currentUrl.startsWith(
-                "/kdkmp/commitments",
-            ),
-        },
-        {
-            label: "Monitoring Confidence",
-            href: "/kdkmp/confidence",
-            icon: Activity,
-            active: currentUrl.startsWith(
-                "/kdkmp/confidence",
-            ),
-        },
-        {
-    label: "Readiness",
-    href: "/kdkmp/readiness",
-    icon: FileCheck2,
-    active: currentUrl.startsWith(
-        "/kdkmp/readiness",
-    ),
-},
-{
-    label: "Document Records",
-    href: "/kdkmp/documents",
-    icon: Files,
-    active: currentUrl.startsWith(
-        "/kdkmp/documents",
-    ),
-},
-    ];
+    {
+        label: "Dashboard",
+        href: "/kdkmp/operator",
+        icon: LayoutDashboard,
+        active:
+            currentUrl ===
+            "/kdkmp/operator",
+    },
+    {
+        label: "Forecast Aktif",
+        href: "/kdkmp/forecasts",
+        icon: ClipboardList,
+        active: currentUrl.startsWith(
+            "/kdkmp/forecasts",
+        ),
+    },
+    {
+        label: "Produsen",
+        href: "/kdkmp/producers",
+        icon: Users,
+        active: currentUrl.startsWith(
+            "/kdkmp/producers",
+        ),
+    },
+    {
+        label: "Expected Harvest",
+        href: "/kdkmp/expected-harvests",
+        icon: CalendarDays,
+        active: currentUrl.startsWith(
+            "/kdkmp/expected-harvests",
+        ),
+    },
+    {
+        label: "Komitmen Pasokan",
+        href: "/kdkmp/commitments",
+        icon: Handshake,
+        active: currentUrl.startsWith(
+            "/kdkmp/commitments",
+        ),
+    },
+    {
+        label: "Monitoring Confidence",
+        href: "/kdkmp/confidence",
+        icon: Activity,
+        active: currentUrl.startsWith(
+            "/kdkmp/confidence",
+        ),
+    },
+    {
+        label: "Fallback Request",
+        href: "/kdkmp/fallback-requests",
+        icon: Send,
+        active: currentUrl.startsWith(
+            "/kdkmp/fallback-requests",
+        ),
+    },
+    {
+        label: "Jaringan Fallback",
+        href: "/kdkmp/fallback-network",
+        icon: Network,
+        active: currentUrl.startsWith(
+            "/kdkmp/fallback-network",
+        ),
+    },
+    {
+        label: "Fallback Offer",
+        href: "/kdkmp/fallback-offers",
+        icon: Handshake,
+        active: currentUrl.startsWith(
+            "/kdkmp/fallback-offers",
+        ),
+    },
+    {
+        label: "Readiness",
+        href: "/kdkmp/readiness",
+        icon: FileCheck2,
+        active: currentUrl.startsWith(
+            "/kdkmp/readiness",
+        ),
+    },
+    {
+        label: "Document Records",
+        href: "/kdkmp/documents",
+        icon: Files,
+        active: currentUrl.startsWith(
+            "/kdkmp/documents",
+        ),
+    },
+];
 
     const managerNavigation = [
         {
