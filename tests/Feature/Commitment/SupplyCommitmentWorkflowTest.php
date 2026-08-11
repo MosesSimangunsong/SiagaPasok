@@ -10,8 +10,6 @@ use App\Enums\SupplyConfidence;
 use App\Enums\UserRole;
 use App\Enums\AuditSource;
 use App\Services\Commitment\CommitmentLifecycleService;
-use App\Services\Notification\DerivedForecastStateObservationService;
-use App\Services\Notification\OperationalNotificationService;
 use Carbon\CarbonImmutable;
 use App\Models\Commodity;
 use App\Models\CommitmentConfidenceEvent;
@@ -24,17 +22,18 @@ use App\Models\SupplyCommitment;
 use App\Models\SupplyNetworkLink;
 use App\Models\Unit;
 use App\Models\User;
+use App\Models\ForecastDerivedStateObservation;
 use App\Services\Commitment\CommitmentWorkflowService;
 use App\Services\Commitment\ConfidenceService;
 use App\Services\Forecast\DemandForecastService;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class SupplyCommitmentWorkflowTest extends TestCase
 {
-    use RefreshDatabase;
+    use DatabaseMigrations;
 
     public function test_operator_can_create_commitment_draft_for_own_organization(): void
     {
@@ -818,7 +817,7 @@ class SupplyCommitmentWorkflowTest extends TestCase
     }
 
 
-    public function test_commitment_approval_notifies_operator_after_manager_decision(): void
+   public function test_commitment_approval_notifies_operator_after_manager_decision(): void
 {
     $context =
         $this->createOperationalContext(
@@ -843,54 +842,70 @@ class SupplyCommitmentWorkflowTest extends TestCase
             ->versions()
             ->firstOrFail();
 
-    /*
-     * Submit memakai service nyata.
-     *
-     * Outcome mock baru dipasang sesudah submit
-     * supaya expectation hanya mengunci keputusan
-     * Manager.
-     */
     $workflow->submit(
         $context['operator'],
         $version
     );
 
-    $notificationService =
-        $this->mock(
-            OperationalNotificationService::class
-        );
-
-    $notificationService
-        ->shouldReceive(
-            'commitmentApproved'
-        )
-        ->once()
-        ->withArgs(
-            fn (
-                SupplyCommitment $notifiedCommitment,
-                CommitmentVersion $notifiedVersion,
-            ): bool =>
-                $notifiedCommitment->id
-                    === $commitment->id
-                && $notifiedVersion->id
-                    === $version->id
-        );
-
-    $workflowWithNotification =
-        app(
-            CommitmentWorkflowService::class
-        );
-
     $approved =
-        $workflowWithNotification
-            ->approve(
-                $context['manager'],
-                $version->fresh()
-            );
+        $workflow->approve(
+            $context['manager'],
+            $version->fresh()
+        );
 
     $this->assertSame(
         CommitmentApprovalStatus::APPROVED,
         $approved->approval_status
+    );
+
+    /*
+     * NotificationService berjalan afterCommit.
+     *
+     * Kita menguji observable persistence,
+     * bukan implementation interaction.
+     */
+    $this->assertDatabaseHas(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['operator']->id,
+
+            'related_entity_type' =>
+                $version
+                    ->getMorphClass(),
+
+            'related_entity_id' =>
+                $version->id,
+
+            'deduplication_key' =>
+                'commitment-version:'
+                .$version->id
+                .':approved',
+        ]
+    );
+
+    /*
+     * Repeated approval harus idempotent.
+     */
+    $workflow->approve(
+        $context['manager'],
+        $version->fresh()
+    );
+
+    $this->assertSame(
+        1,
+        \App\Models\Notification::query()
+            ->where(
+                'recipient_user_id',
+                $context['operator']->id
+            )
+            ->where(
+                'deduplication_key',
+                'commitment-version:'
+                .$version->id
+                .':approved'
+            )
+            ->count()
     );
 }
 
@@ -924,43 +939,62 @@ public function test_commitment_rejection_notifies_operator_after_manager_decisi
         $version
     );
 
-    $notificationService =
-        $this->mock(
-            OperationalNotificationService::class
-        );
-
-    $notificationService
-        ->shouldReceive(
-            'commitmentRejected'
-        )
-        ->once()
-        ->withArgs(
-            fn (
-                SupplyCommitment $notifiedCommitment,
-                CommitmentVersion $notifiedVersion,
-            ): bool =>
-                $notifiedCommitment->id
-                    === $commitment->id
-                && $notifiedVersion->id
-                    === $version->id
-        );
-
-    $workflowWithNotification =
-        app(
-            CommitmentWorkflowService::class
-        );
-
     $rejected =
-        $workflowWithNotification
-            ->reject(
-                $context['manager'],
-                $version->fresh(),
-                'Kapasitas belum dapat disetujui.'
-            );
+        $workflow->reject(
+            $context['manager'],
+            $version->fresh(),
+            'Kapasitas belum dapat disetujui.'
+        );
 
     $this->assertSame(
         CommitmentApprovalStatus::REJECTED,
         $rejected->approval_status
+    );
+
+    $this->assertDatabaseHas(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['operator']->id,
+
+            'related_entity_type' =>
+                $version
+                    ->getMorphClass(),
+
+            'related_entity_id' =>
+                $version->id,
+
+            'deduplication_key' =>
+                'commitment-version:'
+                .$version->id
+                .':rejected',
+        ]
+    );
+
+    /*
+     * Retry REJECTED command tidak boleh
+     * menghasilkan notification kedua.
+     */
+    $workflow->reject(
+        $context['manager'],
+        $version->fresh(),
+        'Retry request.'
+    );
+
+    $this->assertSame(
+        1,
+        \App\Models\Notification::query()
+            ->where(
+                'recipient_user_id',
+                $context['operator']->id
+            )
+            ->where(
+                'deduplication_key',
+                'commitment-version:'
+                .$version->id
+                .':rejected'
+            )
+            ->count()
     );
 }
 
@@ -1086,32 +1120,19 @@ public function test_commitment_expiry_is_system_audited_preserves_confidence_an
     );
 
     /*
-     * RefreshDatabase membungkus test dalam
-     * transaction, sehingga callback afterCommit
-     * tidak cocok digunakan sebagai assertion
-     * integration di file ini.
+     * Approval telah selesai dan afterCommit
+     * observer sudah boleh berjalan.
      *
-     * Yang perlu dikunci di unit domain ini adalah
-     * lifecycle service memang meminta causal
-     * observation terhadap Forecast yang benar.
+     * Snapshot jumlah observation sekarang menjadi
+     * baseline sebelum lifecycle expiry.
      */
-    $derivedObserver =
-        $this->mock(
-            DerivedForecastStateObservationService::class
-        );
-
-    $derivedObserver
-        ->shouldReceive(
-            'observeAfterCommit'
-        )
-        ->once()
-        ->withArgs(
-            fn (
-                DemandForecast $forecast
-            ): bool =>
-                $forecast->id
-                === $context['forecast']->id
-        );
+    $observationsBeforeExpiry =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->count();
 
     $lifecycleService =
         app(
@@ -1141,6 +1162,10 @@ public function test_commitment_expiry_is_system_audited_preserves_confidence_an
         $commitment->lifecycle_status
     );
 
+    $this->assertNotNull(
+        $commitment->expired_at
+    );
+
     $this->assertTrue(
         $commitment
             ->expired_at
@@ -1150,11 +1175,11 @@ public function test_commitment_expiry_is_system_audited_preserves_confidence_an
     );
 
     /*
-     * Lifecycle expiry bukan confidence event.
+     * Expiry adalah lifecycle transition,
+     * bukan confidence transition.
      *
-     * Historical confidence terakhir tetap GREEN,
-     * sementara eligibility menjadi FALSE karena
-     * lifecycle bukan ACTIVE.
+     * Historical confidence terakhir tetap
+     * tersimpan sebagai GREEN.
      */
     $this->assertSame(
         SupplyConfidence::GREEN,
@@ -1184,8 +1209,27 @@ public function test_commitment_expiry_is_system_audited_preserves_confidence_an
     );
 
     /*
-     * Retry pada logical event yang sama tidak
-     * membuat state transition atau audit kedua.
+     * ACTIVE GREEN contribution menjadi
+     * tidak eligible setelah lifecycle EXPIRED.
+     *
+     * Mutation-driven observer harus menangkap
+     * perubahan derived Forecast state.
+     */
+    $observationsAfterExpiry =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->count();
+
+    $this->assertSame(
+        $observationsBeforeExpiry + 1,
+        $observationsAfterExpiry
+    );
+
+    /*
+     * Retry logical expiry.
      */
     $changedAgain =
         $lifecycleService
@@ -1215,6 +1259,20 @@ public function test_commitment_expiry_is_system_audited_preserves_confidence_an
             ->where(
                 'action',
                 'COMMITMENT_EXPIRED'
+            )
+            ->count()
+    );
+
+    /*
+     * Retry juga tidak boleh membuat
+     * derived observation tambahan.
+     */
+    $this->assertSame(
+        $observationsAfterExpiry,
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
             )
             ->count()
     );
