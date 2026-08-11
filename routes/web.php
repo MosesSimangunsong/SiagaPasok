@@ -47,6 +47,7 @@ use App\Http\Controllers\Kdkmp\CommitmentCancellationController;
 use App\Http\Controllers\Demo\DemoAccountSwitchController;
 use App\Http\Controllers\Demo\DemoSupplyRiskController;
 use App\Http\Controllers\Demo\DemoFallbackRequestController;
+use App\Http\Controllers\Demo\DemoFallbackSourceController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -169,7 +170,53 @@ Route::post(
     );
 
 
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — NETWORK Fallback Source
+|--------------------------------------------------------------------------
+|
+| Source Commitment tetap memakai maker-checker asli.
+|
+| Mitra Operator:
+| create fallback source -> submit
+|
+| Mitra Manager:
+| approve -> GREEN
+|
+*/
+
+Route::post(
+    '/demo/scenario/fallback/source',
+    [
+        DemoFallbackSourceController::class,
+        'prepare',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_OPERATOR',
+    ])
+    ->name(
+        'demo.scenario.fallback.source.prepare'
+    );
+
+Route::post(
+    '/demo/scenario/fallback/source/approve',
+    [
+        DemoFallbackSourceController::class,
+        'approve',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_MANAGER',
+    ])
+    ->name(
+        'demo.scenario.fallback.source.approve'
+    );
     
+
     /*
 |--------------------------------------------------------------------------
 | Shared — Notification Center
