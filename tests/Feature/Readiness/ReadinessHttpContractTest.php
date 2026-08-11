@@ -537,8 +537,7 @@ class ReadinessHttpContractTest extends TestCase
                 ) =>
                     $page
                         ->component(
-    'Sppg/Forecasts/Readiness',
-    false
+    'Sppg/Forecasts/Readiness'
 )
                         ->where(
                             'forecast.id',
@@ -790,6 +789,419 @@ class ReadinessHttpContractTest extends TestCase
         }
     }
 
+
+    public function test_kdkmp_forecast_detail_exposes_canonical_readiness_entry_context(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'FORECAST-READINESS-ENTRY'
+        );
+
+    $logisticsRequirement =
+        $this->createRequirement(
+            context: $context,
+            type:
+                ReadinessType::LOGISTICS,
+            code:
+                'LOG-FORECAST-ENTRY'
+        );
+
+    /*
+     * Direct approved GREEN supply dari fixture
+     * membuat KDKMP ini current contributor.
+     *
+     * Belum ada checklist, sehingga Operator
+     * harus memperoleh prepare action.
+     */
+    $response =
+        $this->actingAs(
+            $context['operator']
+        )
+            ->get(
+                '/kdkmp/forecasts/'
+                .$context['forecast']->id
+            );
+
+    $response
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Forecasts/Show'
+                    )
+                    ->where(
+                        'forecast.id',
+                        $context['forecast']->id
+                    )
+                    ->where(
+                        'readinessContext.is_contributor',
+                        true
+                    )
+                    ->where(
+                        'readinessContext.logistics.checklist_id',
+                        null
+                    )
+                    ->where(
+                        'readinessContext.logistics.can_prepare',
+                        true
+                    )
+                    ->where(
+                        'readinessContext.logistics.can_open',
+                        false
+                    )
+                    ->where(
+                        'readinessContext.logistics.ready',
+                        false
+                    )
+                    ->where(
+                        'readinessContext.document.checklist_id',
+                        null
+                    )
+                    ->where(
+                        'readinessContext.document.can_prepare',
+                        true
+                    )
+                    ->where(
+                        'readinessContext.document.can_open',
+                        false
+                    )
+        );
+
+    /*
+     * Prepare melalui HTTP command.
+     */
+    $this->actingAs(
+        $context['operator']
+    )
+        ->post(
+            '/kdkmp/forecasts/'
+            .$context['forecast']->id
+            .'/readiness/logistics/prepare'
+        )
+        ->assertRedirect();
+
+    $checklist =
+        ReadinessChecklist::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->where(
+                'organization_id',
+                $context['kdkmp']->id
+            )
+            ->where(
+                'readiness_type',
+                ReadinessType::LOGISTICS->value
+            )
+            ->where(
+                'is_current_version',
+                true
+            )
+            ->firstOrFail();
+
+    $this->assertSame(
+        $logisticsRequirement->id,
+        $checklist
+            ->items
+            ->firstOrFail()
+            ->requirement_id
+    );
+
+    /*
+     * Forecast page sekarang harus beralih
+     * dari Prepare → Open.
+     */
+    $this->actingAs(
+        $context['operator']
+    )
+        ->get(
+            '/kdkmp/forecasts/'
+            .$context['forecast']->id
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Forecasts/Show'
+                    )
+                    ->where(
+                        'readinessContext.is_contributor',
+                        true
+                    )
+                    ->where(
+                        'readinessContext.logistics.checklist_id',
+                        $checklist->id
+                    )
+                    ->where(
+                        'readinessContext.logistics.version_no',
+                        1
+                    )
+                    ->where(
+                        'readinessContext.logistics.status',
+                        ReadinessApprovalStatus
+                            ::DRAFT
+                            ->value
+                    )
+                    ->where(
+                        'readinessContext.logistics.can_prepare',
+                        false
+                    )
+                    ->where(
+                        'readinessContext.logistics.can_open',
+                        true
+                    )
+                    ->where(
+                        'readinessContext.logistics.ready',
+                        false
+                    )
+        );
+}
+
+public function test_manager_readiness_pages_render_real_inertia_components_with_read_only_review_contract(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'MANAGER-READINESS-UI'
+        );
+
+    $checklist =
+        $this->createSubmittedLogisticsChecklist(
+            $context,
+            'LOG-MANAGER-READINESS-UI'
+        );
+
+    /*
+     * Manager queue.
+     */
+    $this->actingAs(
+        $context['manager']
+    )
+        ->get(
+            '/kdkmp/manager/readiness'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Readiness/Index'
+                    )
+                    ->has(
+                        'checklists',
+                        1
+                    )
+                    ->where(
+                        'checklists.0.id',
+                        $checklist->id
+                    )
+                    ->where(
+                        'checklists.0.readiness_type',
+                        ReadinessType::LOGISTICS->value
+                    )
+                    ->where(
+                        'checklists.0.status',
+                        ReadinessApprovalStatus
+                            ::PENDING_APPROVAL
+                            ->value
+                    )
+                    ->where(
+                        'checklists.0.submitted_by.id',
+                        $context['operator']->id
+                    )
+        );
+
+    /*
+     * Read-only review page.
+     */
+    $response =
+        $this->actingAs(
+            $context['manager']
+        )
+            ->get(
+                '/kdkmp/manager/readiness/'
+                .$checklist->id
+            );
+
+    $response
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Readiness/Show'
+                    )
+                    ->where(
+                        'review.id',
+                        $checklist->id
+                    )
+                    ->where(
+                        'review.status',
+                        ReadinessApprovalStatus
+                            ::PENDING_APPROVAL
+                            ->value
+                    )
+                    ->where(
+                        'review.prepared_by.id',
+                        $context['operator']->id
+                    )
+                    ->where(
+                        'review.submitted_by.id',
+                        $context['operator']->id
+                    )
+                    ->has(
+                        'review.items',
+                        1
+                    )
+                    ->where(
+                        'can.approve',
+                        true
+                    )
+                    ->where(
+                        'can.reject',
+                        true
+                    )
+        );
+
+    /*
+     * Manager surface hanya mendapat decision
+     * permissions. Tidak ada payload edit authority
+     * yang dikirim oleh controller.
+     */
+    $props =
+        $response
+            ->viewData(
+                'page'
+            )['props'] ?? [];
+
+    $this->assertSame(
+        [
+            'approve',
+            'reject',
+        ],
+        array_keys(
+            $props['can'] ?? []
+        )
+    );
+}
+
+public function test_document_workspace_renders_only_reusable_organization_scoped_requirements(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'DOCUMENT-WORKSPACE'
+        );
+
+    $organizationRequirement =
+        $this->createRequirement(
+            context: $context,
+            type:
+                ReadinessType::DOCUMENT,
+            code:
+                'DOC-ORG-WORKSPACE',
+            scope:
+                RequirementScope::ORGANIZATION
+        );
+
+    $forecastRequirement =
+        $this->createRequirement(
+            context: $context,
+            type:
+                ReadinessType::DOCUMENT,
+            code:
+                'DOC-FORECAST-WORKSPACE',
+            scope:
+                RequirementScope::FORECAST
+        );
+
+    $response =
+        $this->actingAs(
+            $context['operator']
+        )
+            ->get(
+                '/kdkmp/documents'
+            );
+
+    $response
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Documents/Index'
+                    )
+                    ->has(
+                        'records',
+                        0
+                    )
+                    ->has(
+                        'requirements',
+                        1
+                    )
+                    ->where(
+                        'requirements.0.id',
+                        $organizationRequirement->id
+                    )
+                    ->where(
+                        'requirements.0.requirement_code',
+                        'DOC-ORG-WORKSPACE'
+                    )
+                    ->where(
+                        'requirements.0.scope',
+                        RequirementScope
+                            ::ORGANIZATION
+                            ->value
+                    )
+        );
+
+    /*
+     * Forecast-specific requirement tetap legal
+     * untuk Document Readiness checklist,
+     * tetapi tidak boleh ditawarkan sebagai
+     * reusable organization Document Record.
+     */
+    $serialized =
+        json_encode(
+            $response
+                ->viewData(
+                    'page'
+                )['props'] ?? []
+        );
+
+    $this->assertIsString(
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        (string)
+        $forecastRequirement->id,
+        json_encode(
+            $response
+                ->viewData(
+                    'page'
+                )['props'][
+                    'requirements'
+                ] ?? []
+        )
+    );
+
+    $this->assertStringNotContainsString(
+        'DOC-FORECAST-WORKSPACE',
+        $serialized
+    );
+}
     private function createSubmittedLogisticsChecklist(
         array $context,
         string $requirementCode,

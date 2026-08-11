@@ -64,20 +64,25 @@ class ReadinessApprovalController extends Controller
                         ReadinessChecklist $checklist
                     ): array => [
                         'id' =>
-                            $checklist->id,
+    $checklist->id,
 
-                        'readiness_type' =>
-                            $checklist
-                                ->readiness_type
-                                ->value,
+'readiness_type' =>
+    $checklist
+        ->readiness_type
+        ->value,
 
-                        'version_no' =>
-                            $checklist
-                                ->version_no,
+'version_no' =>
+    $checklist
+        ->version_no,
 
-                        'forecast_version' =>
-                            $checklist
-                                ->forecast_version,
+'forecast_version' =>
+    $checklist
+        ->forecast_version,
+
+'status' =>
+    $checklist
+        ->status
+        ->value,
 
                         'forecast' => [
                             'id' =>
