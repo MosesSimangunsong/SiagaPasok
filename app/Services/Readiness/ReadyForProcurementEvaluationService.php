@@ -176,11 +176,14 @@ final class ReadyForProcurementEvaluationService
                 demandTarget:
                     $demandTarget,
 
-                totalSafeSupply:
-                    null,
+totalSafeSupply:
+    null,
 
-                coveragePercent:
-                    null,
+atRiskSupply:
+    null,
+
+coveragePercent:
+    null,
 
                 shortfall:
                     null,
@@ -245,11 +248,14 @@ final class ReadyForProcurementEvaluationService
                 demandTarget:
                     $supplyMetrics->demandTarget,
 
-                totalSafeSupply:
-                    $supplyMetrics->totalSafeSupply,
+totalSafeSupply:
+    $supplyMetrics->totalSafeSupply,
 
-                coveragePercent:
-                    $supplyMetrics->coveragePercent,
+atRiskSupply:
+    $supplyMetrics->atRiskSupply,
+
+coveragePercent:
+    $supplyMetrics->coveragePercent,
 
                 shortfall:
                     $supplyMetrics->shortfall,
@@ -387,11 +393,14 @@ final class ReadyForProcurementEvaluationService
             demandTarget:
                 $supplyMetrics->demandTarget,
 
-            totalSafeSupply:
-                $supplyMetrics->totalSafeSupply,
+totalSafeSupply:
+    $supplyMetrics->totalSafeSupply,
 
-            coveragePercent:
-                $supplyMetrics->coveragePercent,
+atRiskSupply:
+    $supplyMetrics->atRiskSupply,
+
+coveragePercent:
+    $supplyMetrics->coveragePercent,
 
             shortfall:
                 $supplyMetrics->shortfall,

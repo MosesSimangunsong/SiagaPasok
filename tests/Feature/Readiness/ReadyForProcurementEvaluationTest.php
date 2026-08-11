@@ -101,6 +101,11 @@ class ReadyForProcurementEvaluationTest extends TestCase
         );
 
         $this->assertSame(
+    '0.000000',
+    $result->atRiskSupply
+);
+
+        $this->assertSame(
             [
                 $context['kdkmp']->id,
             ],
@@ -250,6 +255,11 @@ class ReadyForProcurementEvaluationTest extends TestCase
         $this->assertFalse(
             $result->volumeReady
         );
+
+        $this->assertSame(
+    '300.000000',
+    $result->atRiskSupply
+);
 
         $this->assertSame(
             [],
@@ -721,6 +731,11 @@ class ReadyForProcurementEvaluationTest extends TestCase
         );
 
         $this->assertSame(
+    '0.000000',
+    $result->atRiskSupply
+);
+
+        $this->assertSame(
             [],
             $result->contributorOrganizationIds
         );
@@ -756,6 +771,10 @@ class ReadyForProcurementEvaluationTest extends TestCase
         $this->assertFalse(
             $result->forecastPublished
         );
+
+        $this->assertNull(
+    $result->atRiskSupply
+);
 
         $this->assertTrue(
             $result->operationallyValid
@@ -878,6 +897,16 @@ class ReadyForProcurementEvaluationTest extends TestCase
         $this->assertTrue(
             $payload['volume_ready']
         );
+
+        $this->assertArrayHasKey(
+    'at_risk_supply',
+    $payload
+);
+
+$this->assertSame(
+    '0.000000',
+    $payload['at_risk_supply']
+);
 
         $this->assertTrue(
             $payload[
