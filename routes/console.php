@@ -12,6 +12,23 @@ Artisan::command('inspire', function () {
     'Display an inspiring quote'
 );
 
+/*
+ * Materialize approved Commitment lifecycle expiry.
+ *
+ * Canonical supply calculation tetap time-aware
+ * dan tidak bergantung pada scheduler ini.
+ *
+ * Dijalankan sebelum stale confidence agar
+ * Commitment yang sudah melewati availability end
+ * tidak menerima downgrade stale yang tidak lagi
+ * relevan.
+ */
+Schedule::command(
+    'commitments:evaluate-expiry'
+)
+    ->everyMinute()
+    ->withoutOverlapping();
+
 Schedule::command(
     'commitments:evaluate-stale-confidence'
 )
@@ -20,17 +37,6 @@ Schedule::command(
 
 /*
  * Materialize lifecycle Fallback berbasis waktu.
- *
- * Offer:
- * T >= expires_at
- *     -> AVAILABLE dapat menjadi EXPIRED.
- *
- * Request:
- * T > response_deadline_at
- *     -> OPEN dapat menjadi EXPIRED.
- *
- * Domain service tetap menjadi authority atas
- * transition dan reserve release.
  */
 Schedule::command(
     'fallback:evaluate-expiry'
@@ -56,12 +62,9 @@ Schedule::command(
  * Mutation-driven recalculation menggunakan
  * observeAfterCommit().
  *
- * Periodic observer terutama menangkap transition
- * berbasis waktu dan menjadi retry safety net untuk
- * derived Shortfall/RFP observation.
- *
- * Diletakkan setelah lifecycle jobs agar evaluation
- * periodik membaca state temporal terbaru.
+ * Diletakkan setelah lifecycle jobs agar snapshot
+ * periodik membaca materialized temporal state
+ * terbaru.
  */
 Schedule::command(
     'forecasts:observe-derived-state'

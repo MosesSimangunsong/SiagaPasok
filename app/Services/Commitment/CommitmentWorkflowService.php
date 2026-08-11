@@ -930,6 +930,21 @@ return $currentVersion
                         ),
                 );
 
+                /*
+ * UF-COM-03:
+ *
+ * Setelah Manager mengambil keputusan,
+ * Operator pemilik Commitment harus menerima
+ * persistent outcome notification.
+ *
+ * NotificationService menunggu transaction commit.
+ */
+$this->operationalNotificationService
+    ->commitmentApproved(
+        $commitment,
+        $currentVersion
+    );
+
                 if ($isInitialApproval) {
                     $event =
                         CommitmentConfidenceEvent::create([
@@ -1105,6 +1120,19 @@ return $currentVersion
                         ),
                     reasonNote: $reason,
                 );
+
+                /*
+ * UF-COM-04:
+ *
+ * REJECTED tidak mengubah Safe Supply current,
+ * tetapi Operator perlu mengetahui keputusan
+ * Manager dan review reason.
+ */
+$this->operationalNotificationService
+    ->commitmentRejected(
+        $commitment,
+        $currentVersion
+    );
 
                 return $currentVersion
                     ->refresh();

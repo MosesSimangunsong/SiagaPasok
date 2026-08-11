@@ -79,6 +79,109 @@ final class OperationalNotificationService
     }
 
 
+    public function commitmentApproved(
+    SupplyCommitment $commitment,
+    CommitmentVersion $version,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperators(
+                $commitment
+                    ->organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                /*
+                 * Tetap memakai family approval
+                 * workflow agar primary notification
+                 * categories tidak bertambah.
+                 */
+                type:
+                    NotificationType
+                        ::APPROVAL_REQUIRED,
+
+                priority:
+                    NotificationPriority
+                        ::INFORMATION,
+
+                title:
+                    'Commitment disetujui',
+
+                message:
+                    'Commitment Version '
+                    .$version->version_no
+                    .' telah disetujui Manager. '
+                    .'Lihat status pasokan terbaru.',
+
+                relatedEntity:
+                    $version,
+
+                actionUrl:
+                    '/kdkmp/commitments/'
+                    .$commitment->id,
+
+                deduplicationKey:
+                    'commitment-version:'
+                    .$version->id
+                    .':approved',
+            );
+    }
+}
+
+public function commitmentRejected(
+    SupplyCommitment $commitment,
+    CommitmentVersion $version,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperators(
+                $commitment
+                    ->organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::APPROVAL_REQUIRED,
+
+                priority:
+                    NotificationPriority
+                        ::ACTION,
+
+                title:
+                    'Commitment ditolak',
+
+                message:
+                    'Commitment Version '
+                    .$version->version_no
+                    .' ditolak Manager. '
+                    .'Tinjau alasan review sebelum '
+                    .'menyiapkan perbaikan atau revision.',
+
+                relatedEntity:
+                    $version,
+
+                actionUrl:
+                    '/kdkmp/commitments/'
+                    .$commitment->id,
+
+                deduplicationKey:
+                    'commitment-version:'
+                    .$version->id
+                    .':rejected',
+            );
+    }
+}
 
     public function shortfallIncreased(
     DemandForecast $forecast,
