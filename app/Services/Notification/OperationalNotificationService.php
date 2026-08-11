@@ -5,12 +5,15 @@ namespace App\Services\Notification;
 use App\Enums\NotificationPriority;
 use App\Enums\NotificationType;
 use App\Enums\ReadinessType;
+use App\Enums\SupplyConfidence;
+use App\Models\ConfidenceRecoveryRequest;
+use App\Models\SupplyCommitment;
 use App\Models\CommitmentVersion;
 use App\Models\FallbackOffer;
 use App\Models\FallbackRequest;
 use App\Models\ReadinessChecklist;
-use App\Models\SupplyCommitment;
 use App\Models\DemandForecast;
+use App\Models\CommitmentConfidenceEvent;
 
 final class OperationalNotificationService
 {
@@ -74,6 +77,158 @@ final class OperationalNotificationService
         }
     }
 
+
+public function supplyConfidenceDowngraded(
+    SupplyCommitment $commitment,
+    CommitmentConfidenceEvent $event,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperatorsAndManagers(
+                $commitment
+                    ->organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::SUPPLY_RISK,
+
+                priority:
+                    NotificationPriority
+                        ::WARNING,
+
+                title:
+                    'Confidence pasokan menurun',
+
+                message:
+                    'Confidence Commitment berubah dari '
+                    .$event
+                        ->from_confidence
+                        ?->value
+                    .' menjadi '
+                    .$event
+                        ->to_confidence
+                        ->value
+                    .'. '
+                    .$event->reason_note,
+
+                relatedEntity:
+                    $commitment,
+
+                actionUrl:
+                    '/kdkmp/commitments/'
+                    .$commitment->id,
+
+                deduplicationKey:
+                    'confidence-event:'
+                    .$event->id
+                    .':supply-risk',
+            );
+    }
+}
+
+public function staleCommitmentDetected(
+    SupplyCommitment $commitment,
+    CommitmentConfidenceEvent $event,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperators(
+                $commitment
+                    ->organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::STALE_COMMITMENT,
+
+                priority:
+                    NotificationPriority
+                        ::WARNING,
+
+                title:
+                    'Commitment perlu diverifikasi',
+
+                message:
+                    'Confidence Commitment diturunkan '
+                    .'otomatis menjadi YELLOW karena '
+                    .'data verifikasi telah melewati '
+                    .'freshness interval.',
+
+                relatedEntity:
+                    $commitment,
+
+                actionUrl:
+                    '/kdkmp/commitments/'
+                    .$commitment->id,
+
+                deduplicationKey:
+                    'confidence-event:'
+                    .$event->id
+                    .':stale',
+            );
+    }
+}
+
+public function confidenceRecoveryApprovalRequired(
+    SupplyCommitment $commitment,
+    ConfidenceRecoveryRequest $recovery,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpManagers(
+                $commitment
+                    ->organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::APPROVAL_REQUIRED,
+
+                priority:
+                    NotificationPriority
+                        ::ACTION,
+
+                title:
+                    'Recovery confidence perlu persetujuan',
+
+                message:
+                    'Operator mengajukan pemulihan '
+                    .'Commitment YELLOW ke GREEN dan '
+                    .'menunggu review Manager.',
+
+                relatedEntity:
+                    $recovery,
+
+                actionUrl:
+                    '/kdkmp/manager/recoveries/'
+                    .$recovery->id,
+
+                deduplicationKey:
+                    'confidence-recovery:'
+                    .$recovery->id
+                    .':approval-required',
+            );
+    }
+}
 
     public function fallbackOfferApprovalRequired(
     FallbackOffer $offer,

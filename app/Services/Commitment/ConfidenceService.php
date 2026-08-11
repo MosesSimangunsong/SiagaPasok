@@ -13,6 +13,7 @@ use App\Models\SupplyCommitment;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Fallback\FallbackCapacityService;
+use App\Services\Notification\OperationalNotificationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -35,8 +36,14 @@ class ConfidenceService
         'COMMITMENT_CONFIDENCE_RECOVERED';
 
     public function __construct(
-    private readonly AuditService $auditService,
-    private readonly FallbackCapacityService $fallbackCapacity,
+    private readonly AuditService
+        $auditService,
+
+    private readonly FallbackCapacityService
+        $fallbackCapacity,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
 ) {
 }
 
@@ -198,7 +205,8 @@ class ConfidenceService
                     SupplyConfidence::YELLOW,
             ]);
 
-            CommitmentConfidenceEvent::create([
+            $event =
+    CommitmentConfidenceEvent::create([
                 'commitment_id' =>
                     $current->id,
 
@@ -238,6 +246,12 @@ class ConfidenceService
                 reasonNote:
                     $reasonNote,
             );
+
+            $this->operationalNotificationService
+    ->staleCommitmentDetected(
+        $current,
+        $event
+    );
 
             return true;
         }
@@ -388,6 +402,12 @@ class ConfidenceService
                         ),
                     reasonNote: $reason,
                 );
+
+                $this->operationalNotificationService
+    ->confidenceRecoveryApprovalRequired(
+        $current,
+        $recovery
+    );
 
                 return $recovery->load([
                     'commitment.activeVersion',
@@ -929,31 +949,32 @@ if (
                         $toConfidence,
                 ]);
 
-                CommitmentConfidenceEvent::create([
-                    'commitment_id' =>
-                        $current->id,
+                $event =
+    CommitmentConfidenceEvent::create([
+        'commitment_id' =>
+            $current->id,
 
-                    'from_confidence' =>
-                        $fromConfidence,
+        'from_confidence' =>
+            $fromConfidence,
 
-                    'to_confidence' =>
-                        $toConfidence,
+        'to_confidence' =>
+            $toConfidence,
 
-                    'source' =>
-                        $source,
+        'source' =>
+            $source,
 
-                    'reason_code' =>
-                        $reasonCode,
+        'reason_code' =>
+            $reasonCode,
 
-                    'reason_note' =>
-                        $reasonNote,
+        'reason_note' =>
+            $reasonNote,
 
-                    'actor_user_id' =>
-                        $actor?->id,
+        'actor_user_id' =>
+            $actor?->id,
 
-                    'occurred_at' =>
-                        now(),
-                ]);
+        'occurred_at' =>
+            now(),
+    ]);
 
                 $this->auditService->record(
                     actor: $actor,
@@ -969,6 +990,22 @@ if (
                     reasonNote:
                         $reasonNote,
                 );
+
+                /*
+ * Generic explicit/system downgrade.
+ *
+ * Dedicated stale evaluator memiliki notification
+ * type sendiri dan tidak melewati block ini.
+ */
+$this->operationalNotificationService
+    ->supplyConfidenceDowngraded(
+        $current,
+        $event
+    );
+
+    if ($fromConfidence === $toConfidence) {
+    return $current;
+}
 
                 return $current->refresh();
             }
