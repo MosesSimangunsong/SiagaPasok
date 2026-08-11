@@ -135,16 +135,23 @@ export default function KdkmpLayout({
             "/kdkmp/readiness",
         ),
     },
-    {
-        label: "Document Records",
-        href: "/kdkmp/documents",
-        icon: Files,
-        active: currentUrl.startsWith(
-            "/kdkmp/documents",
-        ),
-    },
-
-    {
+{
+    label: "Document Records",
+    href: "/kdkmp/documents",
+    icon: Files,
+    active: currentUrl.startsWith(
+        "/kdkmp/documents",
+    ),
+},
+{
+    label: "Hasil Fulfilment",
+    href: "/kdkmp/fulfilments",
+    icon: ClipboardCheck,
+    active: currentUrl.startsWith(
+        "/kdkmp/fulfilments",
+    ),
+},
+{
     label: "Notifikasi",
     href: "/notifications",
     icon: Bell,
@@ -215,15 +222,23 @@ export default function KdkmpLayout({
             "/kdkmp/manager/incoming-offers",
         ),
     },
-    {
-        label: "Readiness Approval",
-        href: "/kdkmp/manager/readiness",
-        icon: FileCheck2,
-        active: currentUrl.startsWith(
-            "/kdkmp/manager/readiness",
-        ),
-    },
-    {
+{
+    label: "Readiness Approval",
+    href: "/kdkmp/manager/readiness",
+    icon: FileCheck2,
+    active: currentUrl.startsWith(
+        "/kdkmp/manager/readiness",
+    ),
+},
+{
+    label: "Hasil Fulfilment",
+    href: "/kdkmp/fulfilments",
+    icon: ClipboardCheck,
+    active: currentUrl.startsWith(
+        "/kdkmp/fulfilments",
+    ),
+},
+{
     label: "Notifikasi",
     href: "/notifications",
     icon: Bell,

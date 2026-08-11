@@ -42,9 +42,24 @@ const navigation = [
         label: "Forecast Kebutuhan",
         href: "/sppg/forecasts",
         icon: ClipboardList,
-        active: currentUrl.startsWith(
-            "/sppg/forecasts",
-        ),
+        active:
+            currentUrl.startsWith(
+                "/sppg/forecasts",
+            ) &&
+            !currentUrl.includes(
+                "/fulfilments",
+            ),
+    },
+    {
+        label: "Umpan Balik Pemenuhan",
+        href: "/sppg/fulfilments",
+        icon: CheckCircle2,
+        active:
+            currentUrl ===
+                "/sppg/fulfilments" ||
+            currentUrl.includes(
+                "/fulfilments",
+            ),
     },
     {
         label: "Notifikasi",
