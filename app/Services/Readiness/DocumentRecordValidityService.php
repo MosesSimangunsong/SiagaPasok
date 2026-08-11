@@ -9,6 +9,7 @@ use App\Models\DocumentRecord;
 use App\Models\ReadinessChecklist;
 use App\Models\ReadinessItem;
 use Carbon\CarbonInterface;
+use Carbon\CarbonImmutable;
 use Illuminate\Validation\ValidationException;
 
 final class DocumentRecordValidityService
@@ -103,18 +104,26 @@ final class DocumentRecordValidityService
         }
     }
 
-    public function assertEffectiveForForecast(
+public function assertEffectiveForForecast(
     DocumentRecord $documentRecord,
     ReadinessItem $item,
     ReadinessChecklist $checklist,
     DemandForecast $forecast,
     ?int $expectedRevisionNo = null,
+    ?CarbonInterface $evaluatedAt = null,
 ): void {
     $this->assertMatchesItem(
         $documentRecord,
         $item,
         $checklist
     );
+
+    $evaluationTime =
+    $evaluatedAt === null
+        ? CarbonImmutable::now()
+        : CarbonImmutable::instance(
+            $evaluatedAt
+        );
 
     if (
         $expectedRevisionNo !== null
@@ -129,6 +138,33 @@ final class DocumentRecordValidityService
             ),
         ]);
     }
+
+    /*
+ * Expiry merupakan derived time validity.
+ *
+ * Equality pada expires_at masih valid.
+ * Dokumen baru expired ketika evaluation instant
+ * benar-benar melewati expires_at.
+ *
+ * Ini konsisten dengan existing required-period
+ * contract: expires_at == required_end_at masih
+ * dianggap mencakup periode Forecast.
+ */
+if (
+    $documentRecord->expires_at !== null
+    && $evaluationTime->gt(
+        CarbonImmutable::instance(
+            $documentRecord->expires_at
+        )
+    )
+) {
+    throw ValidationException::withMessages([
+        'document_record_id' => (
+            'Document Record telah melewati '
+            .'masa berlaku pada waktu evaluasi.'
+        ),
+    ]);
+}
 
     if (
         $documentRecord->status
@@ -183,15 +219,17 @@ public function isEffectiveForForecast(
     ReadinessChecklist $checklist,
     DemandForecast $forecast,
     ?int $expectedRevisionNo = null,
+    ?CarbonInterface $evaluatedAt = null,
 ): bool {
     try {
-        $this->assertEffectiveForForecast(
-            $documentRecord,
-            $item,
-            $checklist,
-            $forecast,
-            $expectedRevisionNo
-        );
+$this->assertEffectiveForForecast(
+    $documentRecord,
+    $item,
+    $checklist,
+    $forecast,
+    $expectedRevisionNo,
+    $evaluatedAt
+);
 
         return true;
     } catch (ValidationException) {

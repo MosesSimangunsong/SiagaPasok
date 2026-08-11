@@ -121,22 +121,24 @@ final class ReadinessEvaluationService
         }
 
         [
-            $logisticsReady,
-            $logisticsReasons,
-        ] = $this->evaluateType(
-            $currentForecast,
-            $organizationId,
-            ReadinessType::LOGISTICS
-        );
+    $logisticsReady,
+    $logisticsReasons,
+] = $this->evaluateType(
+    $currentForecast,
+    $organizationId,
+    ReadinessType::LOGISTICS,
+    $evaluationTime
+);
 
-        [
-            $documentReady,
-            $documentReasons,
-        ] = $this->evaluateType(
-            $currentForecast,
-            $organizationId,
-            ReadinessType::DOCUMENT
-        );
+[
+    $documentReady,
+    $documentReasons,
+] = $this->evaluateType(
+    $currentForecast,
+    $organizationId,
+    ReadinessType::DOCUMENT,
+    $evaluationTime
+);
 
         return new ContributorReadinessResult(
             forecastId:
@@ -168,11 +170,12 @@ final class ReadinessEvaluationService
     /**
      * @return array{0: bool, 1: array<int, string>}
      */
-    private function evaluateType(
-        DemandForecast $forecast,
-        int $organizationId,
-        ReadinessType $type,
-    ): array {
+private function evaluateType(
+    DemandForecast $forecast,
+    int $organizationId,
+    ReadinessType $type,
+    CarbonImmutable $evaluationTime,
+): array {
         $checklist =
             ReadinessChecklist::query()
                 ->where(
@@ -322,14 +325,15 @@ final class ReadinessEvaluationService
             if (
                 ! $this
                     ->documentRecordValidityService
-                    ->isEffectiveForForecast(
-                        $documentRecord,
-                        $item,
-                        $checklist,
-                        $forecast,
-                        $item
-                            ->document_record_revision_no
-                    )
+->isEffectiveForForecast(
+    $documentRecord,
+    $item,
+    $checklist,
+    $forecast,
+    $item
+        ->document_record_revision_no,
+    $evaluationTime
+)
             ) {
                 $reasons[] =
                     self::REASON_DOCUMENT_INVALID;
