@@ -205,22 +205,6 @@ class HandleInertiaRequests extends Middleware
                     : null,
             ],
 
-            'demo' => [
-                'enabled' =>
-                    $demoEnabled,
-
-                'label' =>
-                    (string) config(
-                        'siagapasok.demo.label',
-                        'SIMULASI'
-                    ),
-
-                'accounts' =>
-                    $demoAccounts,
-
-                'action' =>
-                    $demoAction,
-            ],
 
 
                         'demo' => [
@@ -243,7 +227,7 @@ class HandleInertiaRequests extends Middleware
                     $demoReset,
             ],
 
-            
+
             'notification_center' => [
                 'unread_count' =>
                     $unreadNotificationCount,
