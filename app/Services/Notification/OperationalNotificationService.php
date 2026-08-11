@@ -358,6 +358,61 @@ public function readinessRevisionInvalidated(
     }
 }
 
+public function readinessDependencyInvalidated(
+    ReadinessChecklist $checklist,
+    string $causeKey,
+    string $message,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperatorsAndManagers(
+                $checklist->organization_id
+            );
+
+    $label =
+        match ($checklist->readiness_type) {
+            ReadinessType::LOGISTICS =>
+                'Logistics Readiness',
+
+            ReadinessType::DOCUMENT =>
+                'Document Readiness',
+        };
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::READINESS,
+
+                priority:
+                    NotificationPriority::WARNING,
+
+                title:
+                    $label
+                    .' tidak lagi valid',
+
+                message:
+                    $message,
+
+                relatedEntity:
+                    $checklist,
+
+                actionUrl:
+                    '/kdkmp/readiness/'
+                    .$checklist->id,
+
+                deduplicationKey:
+                    'readiness-checklist:'
+                    .$checklist->id
+                    .':invalidated:'
+                    .$causeKey,
+            );
+    }
+}
+
 
 public function supplyConfidenceDowngraded(
     SupplyCommitment $commitment,

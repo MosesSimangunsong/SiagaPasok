@@ -5,6 +5,11 @@ namespace App\Services\Forecast;
 use App\Enums\AuditSource;
 use App\Enums\ForecastStatus;
 use App\Enums\NetworkRole;
+use App\Enums\ReadinessApprovalStatus;
+use App\Models\ReadinessChecklist;
+use App\Enums\ReadinessType;
+use App\Services\Notification\OperationalNotificationService;
+use App\Services\Readiness\ReadinessEvaluationService;
 use App\Models\DemandForecast;
 use App\Models\SupplyNetworkLink;
 use App\Models\User;
@@ -19,6 +24,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
+
 class DemandForecastService
 {
     private const AUDIT_CREATED = 'FORECAST_CREATED';
@@ -32,10 +38,16 @@ class DemandForecastService
     private readonly AuditService
         $auditService,
 
+    private readonly ReadinessEvaluationService
+        $readinessEvaluationService,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
+
     private readonly DerivedForecastStateObservationService
         $derivedStateObservationService,
 ) {
-}
+}   
 
     public function createDraft(
         User $actor,
@@ -294,6 +306,56 @@ $this->derivedStateObservationService
                 ]
             )->validate();
 
+            $currentlyReadyChecklists =
+                ReadinessChecklist::query()
+                    ->where(
+                        'forecast_id',
+                        $current->id
+                    )
+                    ->where(
+                        'status',
+                        ReadinessApprovalStatus
+                            ::APPROVED
+                            ->value
+                    )
+                    ->where(
+                        'is_current_version',
+                        true
+                    )
+                    ->orderBy('id')
+                    ->get()
+                    ->filter(
+                        function (
+                            ReadinessChecklist $checklist
+                        ) use (
+                            $current
+                        ): bool {
+                            $readiness =
+                                $this
+                                    ->readinessEvaluationService
+                                    ->evaluateContributor(
+                                        $current,
+                                        $checklist
+                                            ->organization_id
+                                    );
+
+                            return match (
+                                $checklist
+                                    ->readiness_type
+                            ) {
+                                ReadinessType::LOGISTICS =>
+                                    $readiness
+                                        ->logisticsReady,
+
+                                ReadinessType::DOCUMENT =>
+                                    $readiness
+                                        ->documentReady,
+                            };
+                        }
+                    )
+                    ->values();
+
+
             $before = $this->snapshot($current);
 
             $current->fill([
@@ -331,15 +393,37 @@ $this->derivedStateObservationService
                 reasonNote: $reason,
             );
 
+            foreach (
+                $currentlyReadyChecklists
+                as $checklist
+            ) {
+                $this->operationalNotificationService
+                    ->readinessDependencyInvalidated(
+                        checklist:
+                            $checklist,
+
+                        causeKey:
+                            'forecast-version-'
+                            .$current->version,
+
+                        message:
+                            'Readiness perlu disiapkan dan '
+                            .'disetujui ulang karena Forecast '
+                            .'telah direvisi ke version '
+                            .$current->version
+                            .'.',
+                    );
+            }
+
             /*
- * Target volume / requirement window / Forecast
- * version can change Shortfall, invalidate Readiness,
- * or remove Ready for Procurement.
- */
-$this->derivedStateObservationService
-    ->observeAfterCommit(
-        $current
-    );
+             * Target volume / requirement window / Forecast
+             * version can change Shortfall, invalidate Readiness,
+             * or remove Ready for Procurement.
+             */
+            $this->derivedStateObservationService
+                ->observeAfterCommit(
+                    $current
+                );
 
             return $current->refresh();
         });
@@ -509,7 +593,7 @@ if ($wasPublished) {
     ->observeAfterCommit(
         $current
     );
-    
+
             return $current->refresh();
         });
     }

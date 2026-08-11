@@ -14,6 +14,8 @@ use App\Models\ReadinessRequirement;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Notification\DerivedForecastStateObservationService;
+use App\Services\Notification\OperationalNotificationService;
+use Illuminate\Support\Collection;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -36,6 +38,12 @@ final class DocumentRecordService
     public function __construct(
     private readonly AuditService
         $auditService,
+
+    private readonly ReadinessEvaluationService
+        $readinessEvaluationService,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
 
     private readonly DerivedForecastStateObservationService
         $derivedStateObservationService,
@@ -233,6 +241,12 @@ final class DocumentRecordService
                         $candidate
                     );
 
+                $readyChecklistsBeforeMutation =
+                    $this
+                        ->resolveCurrentlyReadyDocumentChecklists(
+                            $current
+                        );
+
                 $before =
                     $this->snapshot(
                         $current
@@ -296,15 +310,38 @@ final class DocumentRecordService
                         ),
                 );
 
+                foreach (
+                    $readyChecklistsBeforeMutation
+                    as $checklist
+                ) {
+                    $this->operationalNotificationService
+                        ->readinessDependencyInvalidated(
+                            checklist:
+                                $checklist,
+
+                            causeKey:
+                                'document-'
+                                .$current->id
+                                .'-revision-'
+                                .$current->revision_no,
+
+                            message:
+                                'Document Readiness perlu '
+                                .'persetujuan ulang karena '
+                                .'Document Record yang menjadi '
+                                .'evidence telah diperbarui.',
+                        );
+                }
+
                 /*
- * revision_no berubah dan status kembali PENDING.
- *
- * Approved checklist yang membekukan revision lama
- * langsung menjadi invalid secara derived.
- */
-$this->observeAffectedForecastsAfterCommit(
-    $current
-);
+                 * revision_no berubah dan status kembali PENDING.
+                 *
+                 * Approved checklist yang membekukan revision lama
+                 * langsung menjadi invalid secara derived.
+                 */
+                $this->observeAffectedForecastsAfterCommit(
+                    $current
+                );
 
                 return $current->refresh();
             }
@@ -469,6 +506,12 @@ $this->observeAffectedForecastsAfterCommit(
                     return $current;
                 }
 
+                $readyChecklistsBeforeMutation =
+                    $this
+                        ->resolveCurrentlyReadyDocumentChecklists(
+                            $current
+                        );
+
                 $before =
                     $this->snapshot(
                         $current
@@ -494,13 +537,100 @@ $this->observeAffectedForecastsAfterCommit(
                     reasonNote: $reason,
                 );
 
+                foreach (
+                    $readyChecklistsBeforeMutation
+                    as $checklist
+                ) {
+                    $this->operationalNotificationService
+                        ->readinessDependencyInvalidated(
+                            checklist:
+                                $checklist,
+
+                            causeKey:
+                                'document-'
+                                .$current->id
+                                .'-revoked-revision-'
+                                .$current->revision_no,
+
+                            message:
+                                'Document Readiness tidak lagi '
+                                .'valid karena Document Record '
+                                .'yang menjadi evidence telah '
+                                .'dicabut.',
+                        );
+                }
+
                 $this->observeAffectedForecastsAfterCommit(
-    $current
-);
+                    $current
+                );
 
                 return $current->refresh();
             }
         );
+    }
+
+
+    /**
+     * @return Collection<int, ReadinessChecklist>
+     */
+    private function resolveCurrentlyReadyDocumentChecklists(
+        DocumentRecord $documentRecord,
+    ): Collection {
+        $checklists =
+            ReadinessChecklist::query()
+            ->where(
+                'readiness_type',
+                ReadinessType::DOCUMENT
+                    ->value
+            )
+            ->where(
+                'status',
+                ReadinessApprovalStatus
+                    ::APPROVED
+                    ->value
+            )
+            ->where(
+                'is_current_version',
+                true
+            )
+            ->whereHas(
+                'items',
+                fn ($query) =>
+                    $query->where(
+                        'document_record_id',
+                        $documentRecord->id
+                    )
+            )
+            ->with('forecast')
+            ->orderBy('id')
+            ->get();
+
+        return $checklists
+            ->filter(
+            function (
+                ReadinessChecklist $checklist
+            ): bool {
+                $forecast =
+                    $checklist->forecast;
+
+                if (! $forecast) {
+                    return false;
+                }
+
+                $readiness =
+                    $this
+                        ->readinessEvaluationService
+                        ->evaluateContributor(
+                            $forecast,
+                            $checklist
+                                ->organization_id
+                        );
+
+                return $readiness
+                    ->documentReady;
+            }
+            )
+            ->values();
     }
 
     private function observeAffectedForecastsAfterCommit(
