@@ -46,6 +46,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Kdkmp\CommitmentCancellationController;
 use App\Http\Controllers\Demo\DemoAccountSwitchController;
 use App\Http\Controllers\Demo\DemoSupplyRiskController;
+use App\Http\Controllers\Demo\DemoFallbackRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -120,6 +121,55 @@ Route::post(
         'demo.scenario.supply-risk'
     );
 
+
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — Fallback Request
+|--------------------------------------------------------------------------
+|
+| Demo hanya mengorkestrasi production FallbackRequestService.
+|
+| Operator:
+| DRAFT -> PENDING_APPROVAL
+|
+| Manager:
+| PENDING_APPROVAL -> OPEN
+|
+*/
+
+Route::post(
+    '/demo/scenario/fallback/request',
+    [
+        DemoFallbackRequestController::class,
+        'prepare',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_OPERATOR',
+    ])
+    ->name(
+        'demo.scenario.fallback.request'
+    );
+
+Route::post(
+    '/demo/scenario/fallback/broadcast',
+    [
+        DemoFallbackRequestController::class,
+        'broadcast',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_MANAGER',
+    ])
+    ->name(
+        'demo.scenario.fallback.broadcast'
+    );
+
+
+    
     /*
 |--------------------------------------------------------------------------
 | Shared — Notification Center

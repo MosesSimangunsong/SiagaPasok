@@ -84,6 +84,12 @@ final class DemoIdentifiers
 
     public const PRIMARY_RISK_VOLUME =
         '150.000000';
+    
+    public const FALLBACK_REQUEST_VOLUME =
+    '150.000000';
+
+public const FALLBACK_REQUEST_NOTE =
+    'CONTROLLED DEMO SIMULATION — FALLBACK REQUEST 150 KG.';
 
     /**
      * @return array<int, string>

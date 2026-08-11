@@ -3,10 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Models\Notification;
+use App\Support\Demo\DemoAccountRegistry;
+use App\Support\Demo\DemoScenarioActionResolver;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use App\Support\Demo\DemoAccountRegistry;
-use App\Support\Demo\DemoIdentifiers;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -17,70 +17,101 @@ class HandleInertiaRequests extends Middleware
      */
     protected $rootView = 'app';
 
-    public function version(Request $request): ?string
-    {
-        return parent::version($request);
+    public function version(
+        Request $request
+    ): ?string {
+        return parent::version(
+            $request
+        );
     }
 
     /**
      * @return array<string, mixed>
      */
-    public function share(Request $request): array
-    {
-        $user = $request->user();
+    public function share(
+        Request $request
+    ): array {
+        $user =
+            $request->user();
 
         if ($user) {
-            $user->loadMissing('organization');
+            $user->loadMissing(
+                'organization'
+            );
         }
 
-        $demoEnabled = (bool) config(
-    'siagapasok.demo.enabled',
-    false
-);
+        $demoEnabled =
+            (bool) config(
+                'siagapasok.demo.enabled',
+                false
+            );
 
-$demoAccounts =
-    $demoEnabled && $user
-        ? array_map(
-            static fn (
-                array $account
-            ): array => [
-                ...$account,
-                'href' => route(
-                    'demo.switch-account',
-                    [
-                        'account' =>
-                            $account['key'],
-                    ]
-                ),
-            ],
-            DemoAccountRegistry::options(
-                $user
-            )
-        )
-        : [];
+        $demoAccounts =
+            $demoEnabled && $user
+                ? array_map(
+                    static fn (
+                        array $account
+                    ): array => [
+                        ...$account,
 
-        $canApplyDemoSupplyRisk =
-    $demoEnabled
-    && $user !== null
-    && $user->isKdkmpOperator()
-    && $user->email
-        === DemoIdentifiers
-            ::PRIMARY_OPERATOR_EMAIL
-    && $user->organization?->code
-        === DemoIdentifiers
-            ::PRIMARY_KDKMP_CODE;
-
-        $unreadNotificationCount = $user === null
-            ? 0
-            : Notification::query()
-                ->where(
-                    'recipient_user_id',
-                    $user->id
+                        'href' => route(
+                            'demo.switch-account',
+                            [
+                                'account' =>
+                                    $account['key'],
+                            ]
+                        ),
+                    ],
+                    DemoAccountRegistry::options(
+                        $user
+                    )
                 )
-                ->whereNull(
-                    'read_at'
-                )
-                ->count();
+                : [];
+
+        $demoAction = null;
+
+        if (
+            $demoEnabled
+            && $user
+        ) {
+            $resolvedAction =
+                app(
+                    DemoScenarioActionResolver::class
+                )->resolve(
+                    $user
+                );
+
+            if ($resolvedAction) {
+                $routeName =
+                    $resolvedAction['route'];
+
+                unset(
+                    $resolvedAction['route']
+                );
+
+                $demoAction = [
+                    ...$resolvedAction,
+
+                    'href' =>
+                        route(
+                            $routeName
+                        ),
+                ];
+            }
+        }
+
+        $unreadNotificationCount =
+            $user === null
+                ? 0
+                : Notification::query()
+                    ->where(
+                        'recipient_user_id',
+                        $user->id
+                    )
+                    ->whereNull(
+                        'read_at'
+                    )
+                    ->count();
 
         return [
             ...parent::share($request),
@@ -88,78 +119,103 @@ $demoAccounts =
             'auth' => [
                 'user' => $user
                     ? [
-                        'id' => $user->id,
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'role' => $user->role?->value,
-                        'role_label' => $user->role?->label(),
-                        'is_active' => $user->is_active,
-                        'last_login_at' => $user
-                            ->last_login_at
-                            ?->toIso8601String(),
-                        'organization' => $user->organization
-                            ? [
-                                'id' => $user->organization->id,
-                                'code' => $user->organization->code,
-                                'name' => $user->organization->name,
-                                'organization_type' => $user
-                                    ->organization
-                                    ->organization_type
-                                    ->value,
-                                'organization_type_label' => $user
-                                    ->organization
-                                    ->organization_type
-                                    ->label(),
-                                'is_active' => $user
-                                    ->organization
-                                    ->is_active,
-                            ]
-                            : null,
+                        'id' =>
+                            $user->id,
+
+                        'name' =>
+                            $user->name,
+
+                        'email' =>
+                            $user->email,
+
+                        'role' =>
+                            $user->role?->value,
+
+                        'role_label' =>
+                            $user->role?->label(),
+
+                        'is_active' =>
+                            $user->is_active,
+
+                        'last_login_at' =>
+                            $user
+                                ->last_login_at
+                                ?->toIso8601String(),
+
+                        'organization' =>
+                            $user->organization
+                                ? [
+                                    'id' =>
+                                        $user
+                                            ->organization
+                                            ->id,
+
+                                    'code' =>
+                                        $user
+                                            ->organization
+                                            ->code,
+
+                                    'name' =>
+                                        $user
+                                            ->organization
+                                            ->name,
+
+                                    'organization_type' =>
+                                        $user
+                                            ->organization
+                                            ->organization_type
+                                            ->value,
+
+                                    'organization_type_label' =>
+                                        $user
+                                            ->organization
+                                            ->organization_type
+                                            ->label(),
+
+                                    'is_active' =>
+                                        $user
+                                            ->organization
+                                            ->is_active,
+                                ]
+                                : null,
                     ]
                     : null,
             ],
 
-'demo' => [
-    'enabled' =>
-        $demoEnabled,
+            'demo' => [
+                'enabled' =>
+                    $demoEnabled,
 
-    'label' => (string) config(
-        'siagapasok.demo.label',
-        'SIMULASI'
-    ),
+                'label' =>
+                    (string) config(
+                        'siagapasok.demo.label',
+                        'SIMULASI'
+                    ),
 
-    'accounts' =>
-        $demoAccounts,
+                'accounts' =>
+                    $demoAccounts,
 
-    'actions' => [
-        'supply_risk' =>
-            $canApplyDemoSupplyRisk
-                ? [
-                    'label' =>
-                        'Gangguan Pasokan',
-                    'href' =>
-                        route(
-                            'demo.scenario.supply-risk'
-                        ),
-                ]
-                : null,
-    ],
-],
+                'action' =>
+                    $demoAction,
+            ],
 
             'notification_center' => [
-                'unread_count' => $unreadNotificationCount,
+                'unread_count' =>
+                    $unreadNotificationCount,
 
-                'href' => $user
-                    ? route(
-                        'notifications.index'
-                    )
-                    : null,
+                'href' =>
+                    $user
+                        ? route(
+                            'notifications.index'
+                        )
+                        : null,
             ],
 
             'flash' => [
-                'success' => fn () => $request
-                    ->session()
-                    ->get('success'),
+                'success' =>
+                    fn () => $request
+                        ->session()
+                        ->get('success'),
             ],
         ];
     }

@@ -2,7 +2,7 @@ import { Link, router, usePage } from "@inertiajs/react";
 import {
     Bell,
     Menu,
-    TriangleAlert,
+Play,
     UsersRound,
 } from "lucide-react";
 
@@ -125,10 +125,10 @@ function DemoScenarioControl({ action }) {
                 onClick={handleApply}
                 className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-violet-200 bg-white px-2.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300"
             >
-                <TriangleAlert
-                    className="size-3.5"
-                    aria-hidden="true"
-                />
+<Play
+    className="size-3.5"
+    aria-hidden="true"
+/>
 
                 {action.label}
             </button>
@@ -156,9 +156,7 @@ export default function AppShell({
     ? demoContext.accounts
     : [];
 
-    const demoActions = demoContext.actions ?? {};
-const supplyRiskAction =
-    demoActions.supply_risk ?? null;
+const demoAction = demoContext.action ?? null;
 
 
     const notificationCenter = page.props?.notification_center ?? {};
@@ -291,11 +289,11 @@ const supplyRiskAction =
                     </div>
 
 <div className="ml-4 flex shrink-0 items-center gap-2">
-    {demoEnabled && supplyRiskAction && (
-        <DemoScenarioControl
-            action={supplyRiskAction}
-        />
-    )}
+{demoEnabled && demoAction && (
+    <DemoScenarioControl
+        action={demoAction}
+    />
+)}
 
     {demoEnabled && (
         <DemoRoleSwitch
