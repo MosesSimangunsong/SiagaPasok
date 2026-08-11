@@ -6,6 +6,7 @@ use App\Models\Notification;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use App\Support\Demo\DemoAccountRegistry;
+use App\Support\Demo\DemoIdentifiers;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -58,6 +59,17 @@ $demoAccounts =
         )
         : [];
 
+        $canApplyDemoSupplyRisk =
+    $demoEnabled
+    && $user !== null
+    && $user->isKdkmpOperator()
+    && $user->email
+        === DemoIdentifiers
+            ::PRIMARY_OPERATOR_EMAIL
+    && $user->organization?->code
+        === DemoIdentifiers
+            ::PRIMARY_KDKMP_CODE;
+
         $unreadNotificationCount = $user === null
             ? 0
             : Notification::query()
@@ -107,15 +119,31 @@ $demoAccounts =
                     : null,
             ],
 
-            'demo' => [
-    'enabled' => $demoEnabled,
+'demo' => [
+    'enabled' =>
+        $demoEnabled,
 
     'label' => (string) config(
         'siagapasok.demo.label',
         'SIMULASI'
     ),
 
-    'accounts' => $demoAccounts,
+    'accounts' =>
+        $demoAccounts,
+
+    'actions' => [
+        'supply_risk' =>
+            $canApplyDemoSupplyRisk
+                ? [
+                    'label' =>
+                        'Gangguan Pasokan',
+                    'href' =>
+                        route(
+                            'demo.scenario.supply-risk'
+                        ),
+                ]
+                : null,
+    ],
 ],
 
             'notification_center' => [

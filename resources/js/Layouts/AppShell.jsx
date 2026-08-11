@@ -1,5 +1,10 @@
 import { Link, router, usePage } from "@inertiajs/react";
-import { Bell, Menu, UsersRound } from "lucide-react";
+import {
+    Bell,
+    Menu,
+    TriangleAlert,
+    UsersRound,
+} from "lucide-react";
 
 function SidebarNavigationItem({ item }) {
     const Icon = item.icon;
@@ -94,6 +99,43 @@ function DemoRoleSwitch({ accounts = [] }) {
     );
 }
 
+function DemoScenarioControl({ action }) {
+    if (!action?.href) {
+        return null;
+    }
+
+    const handleApply = () => {
+        router.post(
+            action.href,
+            {},
+            {
+                preserveScroll: true,
+            },
+        );
+    };
+
+    return (
+        <div className="hidden items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 xl:flex">
+            <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-700">
+                Demo Controls
+            </span>
+
+            <button
+                type="button"
+                onClick={handleApply}
+                className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-violet-200 bg-white px-2.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300"
+            >
+                <TriangleAlert
+                    className="size-3.5"
+                    aria-hidden="true"
+                />
+
+                {action.label}
+            </button>
+        </div>
+    );
+}
+
 export default function AppShell({
     children,
     pageTitle,
@@ -113,6 +155,11 @@ export default function AppShell({
     const demoAccounts = Array.isArray(demoContext.accounts)
     ? demoContext.accounts
     : [];
+
+    const demoActions = demoContext.actions ?? {};
+const supplyRiskAction =
+    demoActions.supply_risk ?? null;
+
 
     const notificationCenter = page.props?.notification_center ?? {};
 
@@ -244,8 +291,16 @@ export default function AppShell({
                     </div>
 
 <div className="ml-4 flex shrink-0 items-center gap-2">
+    {demoEnabled && supplyRiskAction && (
+        <DemoScenarioControl
+            action={supplyRiskAction}
+        />
+    )}
+
     {demoEnabled && (
-        <DemoRoleSwitch accounts={demoAccounts} />
+        <DemoRoleSwitch
+            accounts={demoAccounts}
+        />
     )}
 
     {demoEnabled && (

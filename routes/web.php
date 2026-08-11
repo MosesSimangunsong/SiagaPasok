@@ -45,6 +45,7 @@ use App\Http\Controllers\Sppg\SppgDashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Kdkmp\CommitmentCancellationController;
 use App\Http\Controllers\Demo\DemoAccountSwitchController;
+use App\Http\Controllers\Demo\DemoSupplyRiskController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -92,6 +93,32 @@ Route::post(
 )
     ->middleware('demo')
     ->name('demo.switch-account');
+
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — Supply Risk
+|--------------------------------------------------------------------------
+|
+| Presentation utility.
+|
+| Endpoint ini tidak mengubah domain truth secara langsung.
+| Target commitment demo di-resolve server-side dan legitimate
+| ConfidenceService tetap menjadi mutation authority.
+|
+*/
+
+Route::post(
+    '/demo/scenario/supply-risk',
+    DemoSupplyRiskController::class
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_OPERATOR',
+    ])
+    ->name(
+        'demo.scenario.supply-risk'
+    );
 
     /*
 |--------------------------------------------------------------------------
