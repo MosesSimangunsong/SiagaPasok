@@ -164,6 +164,18 @@ function DashboardSummary({
 }
 
 function ActionQueue({ actions }) {
+    const orderedActions = [
+        ...actions,
+    ].sort(
+        (left, right) =>
+            severityRank(
+                left.severity,
+            ) -
+            severityRank(
+                right.severity,
+            ),
+    );
+
     return (
         <Card>
             <CardHeader className="border-b">
@@ -181,7 +193,7 @@ function ActionQueue({ actions }) {
             </CardHeader>
 
             <CardContent className="p-0">
-                {actions.length === 0 ? (
+{orderedActions.length === 0 ? (
                     <div className="flex min-h-44 flex-col items-center justify-center px-6 text-center">
                         <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
                             <CheckCircle2 className="size-5" />
@@ -200,7 +212,7 @@ function ActionQueue({ actions }) {
                     </div>
                 ) : (
                     <div className="divide-y divide-border">
-                        {actions.map(
+                        {orderedActions.map(
                             (action, index) => (
                                 <ActionItem
                                     key={`${action.kind}-${index}`}
@@ -482,8 +494,67 @@ function ForecastItem({ item }) {
                     }
                 />
             </div>
+
+            {!state.ready_for_procurement &&
+    state.reason_codes?.length > 0 && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-3">
+            <div className="flex items-start gap-2">
+                <CircleAlert className="mt-0.5 size-4 shrink-0 text-amber-700" />
+
+                <div>
+                    <p className="text-sm font-medium text-amber-900">
+                        Penghambat Ready for
+                        Procurement
+                    </p>
+
+                    <ul className="mt-1 space-y-1 text-sm text-amber-800">
+                        {state.reason_codes.map(
+                            (reason) => (
+                                <li
+                                    key={
+                                        reason
+                                    }
+                                >
+                                    •{" "}
+                                    {rfpReasonLabel(
+                                        reason,
+                                    )}
+                                </li>
+                            ),
+                        )}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    )}
         </div>
     );
+    function rfpReasonLabel(reason) {
+    const labels = {
+        FORECAST_NOT_PUBLISHED:
+            "Forecast tidak lagi berstatus PUBLISHED.",
+
+        FORECAST_WINDOW_ENDED:
+            "Periode kebutuhan Forecast sudah berakhir.",
+
+        VOLUME_NOT_READY:
+            "Safe Supply belum memenuhi Demand.",
+
+        NO_EFFECTIVE_CONTRIBUTORS:
+            "Belum ada KDKMP dengan effective Safe Supply.",
+
+        LOGISTICS_NOT_READY:
+            "Logistics Readiness seluruh contributor belum terpenuhi.",
+
+        DOCUMENT_NOT_READY:
+            "Document Readiness seluruh contributor belum terpenuhi.",
+    };
+
+    return (
+        labels[reason] ??
+        reason
+    );
+}
 }
 
 function Metric({
@@ -561,15 +632,16 @@ function UpcomingHarvests({
     return (
         <Card>
             <CardHeader className="border-b">
-                <CardTitle>
-                    Expected Harvest Mendatang
-                </CardTitle>
+<CardTitle>
+    Expected Harvest Aktif/Mendatang
+</CardTitle>
 
-                <CardDescription>
-                    Konteks perencanaan internal.
-                    Expected Harvest bukan Safe
-                    Supply.
-                </CardDescription>
+<CardDescription>
+    Indikasi panen yang masih berada
+    pada atau menuju periode panen.
+    Data ini adalah konteks
+    perencanaan dan bukan Safe Supply.
+</CardDescription>
             </CardHeader>
 
             <CardContent className="p-0">
@@ -726,6 +798,20 @@ function FallbackRow({
         </button>
     );
 }
+
+
+function severityRank(severity) {
+    if (severity === "CRITICAL") {
+        return 0;
+    }
+
+    if (severity === "ATTENTION") {
+        return 1;
+    }
+
+    return 2;
+}
+
 
 function severityPresentation(
     severity,

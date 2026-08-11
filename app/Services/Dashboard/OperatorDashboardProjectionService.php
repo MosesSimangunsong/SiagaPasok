@@ -147,11 +147,11 @@ final class OperatorDashboardProjectionService
                 )
                 ->values();
 
-        $this->appendNetworkActions(
-            $actionQueue,
-            $networkRequests
-        );
-
+$this->appendNetworkActions(
+    $actionQueue,
+    $networkRequests,
+    $supplierOffers
+);
         $this->appendSupplierOfferActions(
             $actionQueue,
             $supplierOffers
@@ -805,11 +805,44 @@ final class OperatorDashboardProjectionService
     private function appendNetworkActions(
     array &$actions,
     $networkRequests,
+    $supplierOffers,
 ): void {
+    $requestIdsWithActiveOffer =
+        $supplierOffers
+            ->pluck(
+                'fallback_request_id'
+            )
+            ->map(
+                fn ($id): int =>
+                    (int) $id
+            )
+            ->all();
+
     foreach (
         $networkRequests
         as $request
     ) {
+        /*
+         * Jika supplier sudah mempunyai
+         * DRAFT / PENDING_APPROVAL / AVAILABLE
+         * Offer untuk Request ini, jangan
+         * munculkan broadcast sebagai pekerjaan
+         * kedua.
+         *
+         * DRAFT Offer akan memperoleh task-nya
+         * sendiri. PENDING/AVAILABLE berarti
+         * Operator sedang menunggu pihak lain.
+         */
+        if (
+            in_array(
+                (int) $request->id,
+                $requestIdsWithActiveOffer,
+                true
+            )
+        ) {
+            continue;
+        }
+
         $actions[] = [
             'kind' =>
                 'NETWORK_FALLBACK',
