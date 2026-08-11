@@ -103,7 +103,15 @@ public const NETWORK_SOURCE_HARVEST_NOTE =
 public const NETWORK_SOURCE_COMMITMENT_NOTE =
     'CONTROLLED DEMO SIMULATION — NETWORK FALLBACK SOURCE 160 KG.';
 
-    
+    public const FALLBACK_OFFER_VOLUME =
+    '160.000000';
+
+public const FALLBACK_ACCEPTED_VOLUME =
+    '150.000000';
+
+public const FALLBACK_OFFER_NOTE =
+    'CONTROLLED DEMO SIMULATION — NETWORK FALLBACK OFFER 160 KG.';
+
     /**
      * @return array<int, string>
      */

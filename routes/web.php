@@ -48,6 +48,7 @@ use App\Http\Controllers\Demo\DemoAccountSwitchController;
 use App\Http\Controllers\Demo\DemoSupplyRiskController;
 use App\Http\Controllers\Demo\DemoFallbackRequestController;
 use App\Http\Controllers\Demo\DemoFallbackSourceController;
+use App\Http\Controllers\Demo\DemoFallbackOfferController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -215,7 +216,69 @@ Route::post(
     ->name(
         'demo.scenario.fallback.source.approve'
     );
-    
+
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — Fallback Offer
+|--------------------------------------------------------------------------
+|
+| Mitra Operator:
+| create source-backed Offer -> submit
+|
+| Mitra Manager:
+| approve -> AVAILABLE + reserve 160
+|
+| Tani Manager:
+| Accept 150 -> allocate 150 + release 10
+|
+*/
+
+Route::post(
+    '/demo/scenario/fallback/offer',
+    [
+        DemoFallbackOfferController::class,
+        'prepare',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_OPERATOR',
+    ])
+    ->name(
+        'demo.scenario.fallback.offer.prepare'
+    );
+
+Route::post(
+    '/demo/scenario/fallback/offer/approve',
+    [
+        DemoFallbackOfferController::class,
+        'approve',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_MANAGER',
+    ])
+    ->name(
+        'demo.scenario.fallback.offer.approve'
+    );
+
+Route::post(
+    '/demo/scenario/fallback/offer/accept',
+    [
+        DemoFallbackOfferController::class,
+        'accept',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_MANAGER',
+    ])
+    ->name(
+        'demo.scenario.fallback.offer.accept'
+    );
+
 
     /*
 |--------------------------------------------------------------------------

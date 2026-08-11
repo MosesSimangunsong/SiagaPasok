@@ -9,6 +9,7 @@ use App\Models\FallbackRequest;
 use App\Models\Producer;
 use App\Models\SupplyCommitment;
 use App\Models\User;
+use App\Models\FallbackOffer;
 
 final class DemoScenarioActionResolver
 {
@@ -215,6 +216,32 @@ final class DemoScenarioActionResolver
             ];
         }
 
+                if (
+            $fallbackRequest
+            && $fallbackRequest->isOpen()
+        ) {
+            $offer =
+                $this->resolveDemoOffer(
+                    $fallbackRequest
+                );
+
+            if (
+                $offer
+                && $offer->isAvailable()
+            ) {
+                return [
+                    'key' =>
+                        'fallback_offer_accept',
+
+                    'label' =>
+                        'Accept Fallback 150 kg',
+
+                    'route' =>
+                        'demo.scenario.fallback.offer.accept',
+                ];
+            }
+        }
+
         return null;
     }
 
@@ -225,7 +252,7 @@ final class DemoScenarioActionResolver
      *     route: string
      * }|null
      */
-    private function forNetworkOperator(
+        private function forNetworkOperator(
         User $user,
         DemandForecast $forecast
     ): ?array {
@@ -281,6 +308,37 @@ final class DemoScenarioActionResolver
             ];
         }
 
+        if (
+            ! $version
+            || ! $version->isApproved()
+            || $commitment
+                ->current_confidence
+                !== SupplyConfidence::GREEN
+        ) {
+            return null;
+        }
+
+        $offer =
+            $this->resolveDemoOffer(
+                $fallbackRequest
+            );
+
+        if (
+            $offer === null
+            || $offer->isDraft()
+        ) {
+            return [
+                'key' =>
+                    'fallback_offer_prepare',
+
+                'label' =>
+                    'Siapkan Offer 160 kg',
+
+                'route' =>
+                    'demo.scenario.fallback.offer.prepare',
+            ];
+        }
+
         return null;
     }
 
@@ -291,7 +349,7 @@ final class DemoScenarioActionResolver
      *     route: string
      * }|null
      */
-    private function forNetworkManager(
+        private function forNetworkManager(
         User $user,
         DemandForecast $forecast
     ): ?array {
@@ -335,6 +393,37 @@ final class DemoScenarioActionResolver
 
                 'route' =>
                     'demo.scenario.fallback.source.approve',
+            ];
+        }
+
+        if (
+            ! $version
+            || ! $version->isApproved()
+            || $commitment
+                ->current_confidence
+                !== SupplyConfidence::GREEN
+        ) {
+            return null;
+        }
+
+        $offer =
+            $this->resolveDemoOffer(
+                $fallbackRequest
+            );
+
+        if (
+            $offer
+            && $offer->isPendingApproval()
+        ) {
+            return [
+                'key' =>
+                    'fallback_offer_approve',
+
+                'label' =>
+                    'Approve Offer 160 kg',
+
+                'route' =>
+                    'demo.scenario.fallback.offer.approve',
             ];
         }
 
@@ -432,6 +521,24 @@ final class DemoScenarioActionResolver
             ->first();
     }
 
+
+        private function resolveDemoOffer(
+        FallbackRequest $fallbackRequest
+    ): ?FallbackOffer {
+        return FallbackOffer::query()
+            ->where(
+                'fallback_request_id',
+                $fallbackRequest->id
+            )
+            ->where(
+                'availability_note',
+                DemoIdentifiers
+                    ::FALLBACK_OFFER_NOTE
+            )
+            ->orderByDesc('id')
+            ->first();
+    }
+    
     private function isPrimaryOperator(
         User $user
     ): bool {
