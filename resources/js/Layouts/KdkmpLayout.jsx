@@ -145,43 +145,75 @@ export default function KdkmpLayout({
 ];
 
     const managerNavigation = [
-        {
-            label: "Forecast & Pasokan",
-            href: "/kdkmp/forecasts",
-            icon: ClipboardList,
-            active:
-                currentUrl.startsWith(
-                    "/kdkmp/forecasts",
-                ) ||
-                currentUrl.startsWith(
-                    "/kdkmp/commitments",
-                ),
-        },
-        {
-            label: "Approval Queue",
-            href: "/kdkmp/manager/approvals",
-            icon: ClipboardCheck,
-            active: currentUrl.startsWith(
-                "/kdkmp/manager/approvals",
+    {
+        label: "Dashboard",
+        href: "/kdkmp/manager",
+        icon: LayoutDashboard,
+        active:
+            currentUrl ===
+            "/kdkmp/manager",
+    },
+    {
+        label: "Forecast & Pasokan",
+        href: "/kdkmp/forecasts",
+        icon: ClipboardList,
+        active:
+            currentUrl.startsWith(
+                "/kdkmp/forecasts",
+            ) ||
+            currentUrl.startsWith(
+                "/kdkmp/commitments",
             ),
-        },
-        {
-            label: "Recovery Review",
-            href: "/kdkmp/manager/recoveries",
-            icon: RefreshCcw,
-            active: currentUrl.startsWith(
-                "/kdkmp/manager/recoveries",
-            ),
-        },
-        {
-    label: "Readiness Approval",
-    href: "/kdkmp/manager/readiness",
-    icon: FileCheck2,
-    active: currentUrl.startsWith(
-        "/kdkmp/manager/readiness",
-    ),
-},
-    ];
+    },
+    {
+        label: "Approval Queue",
+        href: "/kdkmp/manager/approvals",
+        icon: ClipboardCheck,
+        active: currentUrl.startsWith(
+            "/kdkmp/manager/approvals",
+        ),
+    },
+    {
+        label: "Recovery Review",
+        href: "/kdkmp/manager/recoveries",
+        icon: RefreshCcw,
+        active: currentUrl.startsWith(
+            "/kdkmp/manager/recoveries",
+        ),
+    },
+    {
+        label: "Fallback Request Review",
+        href: "/kdkmp/manager/fallback-requests",
+        icon: Send,
+        active: currentUrl.startsWith(
+            "/kdkmp/manager/fallback-requests",
+        ),
+    },
+    {
+        label: "Outgoing Offer Review",
+        href: "/kdkmp/manager/outgoing-offers",
+        icon: Handshake,
+        active: currentUrl.startsWith(
+            "/kdkmp/manager/outgoing-offers",
+        ),
+    },
+    {
+        label: "Incoming Offer Decision",
+        href: "/kdkmp/manager/incoming-offers",
+        icon: Network,
+        active: currentUrl.startsWith(
+            "/kdkmp/manager/incoming-offers",
+        ),
+    },
+    {
+        label: "Readiness Approval",
+        href: "/kdkmp/manager/readiness",
+        icon: FileCheck2,
+        active: currentUrl.startsWith(
+            "/kdkmp/manager/readiness",
+        ),
+    },
+];
 
     const navigation =
         isOperator

@@ -874,6 +874,101 @@ public function test_commitment_cancellation_uses_explicit_post_commands_without
 }
 
 
+public function test_manager_dashboard_projects_only_own_pending_commitment_decision(): void
+{
+    $contextA =
+        $this->createPendingCommitmentContext(
+            'MANAGER-DASHBOARD-A'
+        );
+
+    $contextB =
+        $this->createPendingCommitmentContext(
+            'MANAGER-DASHBOARD-B'
+        );
+
+    $this->actingAs(
+        $contextA['manager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (Assert $page) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'organization.id',
+                        $contextA['kdkmp']->id
+                    )
+                    ->where(
+                        'summary.total_pending_decisions',
+                        1
+                    )
+                    ->where(
+                        'summary.commitment_approval_count',
+                        1
+                    )
+                    ->where(
+                        'summary.recovery_review_count',
+                        0
+                    )
+                    ->where(
+                        'summary.fallback_request_approval_count',
+                        0
+                    )
+                    ->where(
+                        'summary.outgoing_offer_review_count',
+                        0
+                    )
+                    ->where(
+                        'summary.incoming_offer_decision_count',
+                        0
+                    )
+                    ->where(
+                        'summary.readiness_approval_count',
+                        0
+                    )
+                    ->where(
+                        'decisionGroups.0.key',
+                        'commitments'
+                    )
+                    ->has(
+                        'decisionGroups.0.items',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.0.items.0.id',
+                        $contextA['version']->id
+                    )
+                    ->where(
+                        'decisionGroups.0.items.0.href',
+                        '/kdkmp/manager/approvals/'
+                        .$contextA['commitment']->id
+                        .'/versions/'
+                        .$contextA['version']->id
+                    )
+        );
+
+    /*
+     * Context B wajib tidak bocor ke
+     * dashboard Manager A.
+     */
+    $this->assertNotSame(
+        $contextA['version']->id,
+        $contextB['version']->id
+    );
+
+    $this->actingAs(
+        $contextA['operator']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertForbidden();
+}
 
 
 private function createApprovedCommitmentContext(

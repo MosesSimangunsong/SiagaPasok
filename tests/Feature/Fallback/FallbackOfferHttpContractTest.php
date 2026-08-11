@@ -1154,6 +1154,112 @@ class FallbackOfferHttpContractTest extends TestCase
         );
     }
 
+
+    public function test_accepted_network_supplier_can_open_contributor_readiness_without_primary_forecast_access(): void
+{
+    $context =
+        $this->createAvailableOfferContext(
+            'NETWORK-CONTRIBUTOR-READINESS'
+        );
+
+    /*
+     * AVAILABLE Offer mempunyai source-backed
+     * reserved capacity dari NETWORK KDKMP.
+     *
+     * Setelah requester Manager menerima 150 kg,
+     * source allocation menjadi effective
+     * Fallback Safe Supply sehingga NETWORK
+     * organization masuk canonical contributor set.
+     */
+    $this->actingAs(
+        $context['manager']
+    )
+        ->post(
+            '/kdkmp/manager/incoming-offers/'
+            .$context['offer']->id
+            .'/accept',
+            [
+                'accepted_volume' =>
+                    '150.000000',
+            ]
+        )
+        ->assertRedirect(
+            route(
+                'kdkmp.manager.incoming-offers.index'
+            )
+        );
+
+    $this->assertSame(
+        FallbackOfferStatus::ACCEPTED,
+        $context['offer']
+            ->fresh()
+            ->status
+    );
+
+    /*
+     * NETWORK contributor tidak memperoleh
+     * PRIMARY planning surface.
+     */
+    $this->actingAs(
+        $context['networkOperator']
+    )
+        ->get(
+            '/kdkmp/forecasts/'
+            .$context['forecast']->id
+        )
+        ->assertForbidden();
+
+    /*
+     * Tetapi NETWORK yang sekarang merupakan
+     * current effective contributor wajib
+     * mempunyai jalur menuju readiness miliknya.
+     */
+    $this->actingAs(
+        $context['networkOperator']
+    )
+        ->get(
+            '/kdkmp/contributor-readiness/'
+            .$context['forecast']->id
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/ContributorReadiness/Show'
+                    )
+                    ->where(
+                        'forecast.id',
+                        $context['forecast']->id
+                    )
+                    ->where(
+                        'readiness.organization_id',
+                        $context['network']->id
+                    )
+                    ->where(
+                        'readiness.is_contributor',
+                        true
+                    )
+                    ->where(
+                        'readiness.logistics_ready',
+                        false
+                    )
+                    ->where(
+                        'readiness.document_ready',
+                        false
+                    )
+                    ->where(
+                        'checklists.logistics',
+                        null
+                    )
+                    ->where(
+                        'checklists.document',
+                        null
+                    )
+        );
+}
     public function test_fallback_offer_http_surface_has_only_explicit_lifecycle_commands(): void
     {
         $routes =

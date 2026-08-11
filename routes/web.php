@@ -32,6 +32,7 @@ use App\Http\Controllers\Kdkmp\ReadinessApprovalController;
 use App\Http\Controllers\Kdkmp\ReadinessController;
 use App\Http\Controllers\Kdkmp\OperatorDashboardController;
 use App\Http\Controllers\Kdkmp\ContributorReadinessController;
+use App\Http\Controllers\Kdkmp\ManagerDashboardController;
 use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
@@ -1288,20 +1289,14 @@ Route::post(
         'kdkmp.operator.dashboard'
     );
 
-    Route::inertia(
-        '/kdkmp/manager',
-        'RoleLanding',
-        [
-            'workspace' => 'Workspace KDKMP',
-            'roleLabel' => 'KDKMP Manager',
-            'description' => (
-                'Kelola approval dan keputusan '
-                .'pasokan KDKMP.'
-            ),
-            'actionLabel' => 'Buka Approval Queue',
-            'actionHref' => '/kdkmp/manager/approvals',
-        ]
+Route::get(
+    '/kdkmp/manager',
+    ManagerDashboardController::class
+)
+    ->middleware(
+        'role:KDKMP_MANAGER'
     )
-        ->middleware('role:KDKMP_MANAGER')
-        ->name('kdkmp.manager.dashboard');
+    ->name(
+        'kdkmp.manager.dashboard'
+    );
 });
