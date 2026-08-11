@@ -1,40 +1,309 @@
-import { Head, router } from "@inertiajs/react";
+import { Button } from "@/components/ui/button";
+import AdminLayout from "@/Layouts/AdminLayout";
+import KdkmpLayout from "@/Layouts/KdkmpLayout";
+import SppgLayout from "@/Layouts/SppgLayout";
+import {
+    Head,
+    Link,
+    router,
+    usePage,
+} from "@inertiajs/react";
+import {
+    BadgeCheck,
+    Bell,
+    Check,
+    CircleAlert,
+    ClipboardCheck,
+    Clock3,
+    FileCheck2,
+    Handshake,
+    Network,
+    TriangleAlert,
+} from "lucide-react";
 
-function formatDateTime(value) {
+const notificationTypeConfig = {
+    APPROVAL_REQUIRED: {
+        icon: ClipboardCheck,
+    },
+
+    SUPPLY_RISK: {
+        icon: TriangleAlert,
+    },
+
+    STALE_COMMITMENT: {
+        icon: Clock3,
+    },
+
+    SHORTFALL: {
+        icon: CircleAlert,
+    },
+
+    FALLBACK_REQUEST: {
+        icon: Network,
+    },
+
+    FALLBACK_OFFER_DECISION: {
+        icon: Handshake,
+    },
+
+    READINESS: {
+        icon: FileCheck2,
+    },
+
+    RFP: {
+        icon: BadgeCheck,
+    },
+};
+
+const priorityConfig = {
+    ACTION: {
+        label: "Tindakan",
+        badgeClass:
+            "border-primary/25 bg-primary/10 text-primary",
+        iconClass:
+            "border-primary/20 bg-primary/10 text-primary",
+    },
+
+    WARNING: {
+        label: "Peringatan",
+        badgeClass:
+            "border-amber-200 bg-amber-50 text-amber-800",
+        iconClass:
+            "border-amber-200 bg-amber-50 text-amber-700",
+    },
+
+    INFORMATION: {
+        label: "Informasi",
+        badgeClass:
+            "border-border bg-muted text-muted-foreground",
+        iconClass:
+            "border-border bg-muted text-muted-foreground",
+    },
+};
+
+function resolveLayout(role) {
+    if (role === "SYSTEM_ADMIN") {
+        return AdminLayout;
+    }
+
+    if (role === "SPPG_USER") {
+        return SppgLayout;
+    }
+
+    return KdkmpLayout;
+}
+
+function relativeTime(value) {
     if (!value) {
         return "-";
     }
 
-    return new Intl.DateTimeFormat("id-ID", {
-        dateStyle: "medium",
-        timeStyle: "short",
-    }).format(new Date(value));
-}
+    const date =
+        new Date(value);
 
-function priorityLabel(priority) {
-    switch (priority) {
-        case "ACTION":
-            return "Tindakan";
+    const timestamp =
+        date.getTime();
 
-        case "WARNING":
-            return "Peringatan";
-
-        case "INFORMATION":
-            return "Informasi";
-
-        default:
-            return priority;
+    if (
+        Number.isNaN(
+            timestamp,
+        )
+    ) {
+        return "-";
     }
+
+    const diffSeconds =
+        Math.round(
+            (
+                timestamp
+                - Date.now()
+            )
+            / 1000,
+        );
+
+    const absoluteSeconds =
+        Math.abs(
+            diffSeconds,
+        );
+
+    const formatter =
+        new Intl.RelativeTimeFormat(
+            "id-ID",
+            {
+                numeric: "auto",
+            },
+        );
+
+    if (
+        absoluteSeconds
+        < 60
+    ) {
+        return formatter.format(
+            diffSeconds,
+            "second",
+        );
+    }
+
+    const diffMinutes =
+        Math.round(
+            diffSeconds / 60,
+        );
+
+    if (
+        Math.abs(
+            diffMinutes,
+        ) < 60
+    ) {
+        return formatter.format(
+            diffMinutes,
+            "minute",
+        );
+    }
+
+    const diffHours =
+        Math.round(
+            diffMinutes / 60,
+        );
+
+    if (
+        Math.abs(
+            diffHours,
+        ) < 24
+    ) {
+        return formatter.format(
+            diffHours,
+            "hour",
+        );
+    }
+
+    const diffDays =
+        Math.round(
+            diffHours / 24,
+        );
+
+    if (
+        Math.abs(
+            diffDays,
+        ) < 30
+    ) {
+        return formatter.format(
+            diffDays,
+            "day",
+        );
+    }
+
+    const diffMonths =
+        Math.round(
+            diffDays / 30,
+        );
+
+    if (
+        Math.abs(
+            diffMonths,
+        ) < 12
+    ) {
+        return formatter.format(
+            diffMonths,
+            "month",
+        );
+    }
+
+    const diffYears =
+        Math.round(
+            diffDays / 365,
+        );
+
+    return formatter.format(
+        diffYears,
+        "year",
+    );
 }
 
-export default function NotificationIndex({
-    notifications,
-}) {
-    const items =
-        notifications?.data ?? [];
+function absoluteTime(value) {
+    if (!value) {
+        return "";
+    }
 
-    const markRead = (notification) => {
-        if (notification.is_read) {
+    const date =
+        new Date(value);
+
+    if (
+        Number.isNaN(
+            date.getTime(),
+        )
+    ) {
+        return "";
+    }
+
+    return new Intl.DateTimeFormat(
+        "id-ID",
+        {
+            dateStyle:
+                "medium",
+
+            timeStyle:
+                "short",
+        },
+    ).format(
+        date,
+    );
+}
+
+function paginationLabel(
+    label,
+) {
+    if (
+        label.includes(
+            "Previous",
+        )
+    ) {
+        return "Sebelumnya";
+    }
+
+    if (
+        label.includes(
+            "Next",
+        )
+    ) {
+        return "Berikutnya";
+    }
+
+    return label
+        .replace(
+            "&laquo;",
+            "",
+        )
+        .replace(
+            "&raquo;",
+            "",
+        )
+        .trim();
+}
+
+function NotificationCard({
+    notification,
+}) {
+    const typeConfig =
+        notificationTypeConfig[
+            notification.type
+        ] ?? {
+            icon: Bell,
+        };
+
+    const priority =
+        priorityConfig[
+            notification.priority
+        ] ??
+        priorityConfig
+            .INFORMATION;
+
+    const Icon =
+        typeConfig.icon;
+
+    const markRead = () => {
+        if (
+            notification.is_read
+        ) {
             return;
         }
 
@@ -42,19 +311,27 @@ export default function NotificationIndex({
             `/notifications/${notification.id}/read`,
             {},
             {
-                preserveScroll: true,
+                preserveScroll:
+                    true,
+
+                preserveState:
+                    true,
             },
         );
     };
 
-    const openNotification = (notification) => {
-        if (!notification.action_url) {
-            markRead(notification);
+    const openAction = () => {
+        if (
+            !notification.action_url
+        ) {
+            markRead();
 
             return;
         }
 
-        if (notification.is_read) {
+        if (
+            notification.is_read
+        ) {
             router.visit(
                 notification.action_url,
             );
@@ -62,143 +339,299 @@ export default function NotificationIndex({
             return;
         }
 
+        /*
+         * Acknowledgement dilakukan terlebih
+         * dahulu sebelum mengikuti CTA.
+         *
+         * Operational entity tetap menjadi
+         * source of truth pada destination page.
+         */
         router.patch(
             `/notifications/${notification.id}/read`,
             {},
             {
-                preserveScroll: true,
+                preserveScroll:
+                    true,
 
-                onSuccess: () => {
-                    router.visit(
-                        notification.action_url,
-                    );
-                },
+                onSuccess:
+                    () => {
+                        router.visit(
+                            notification.action_url,
+                        );
+                    },
             },
         );
     };
 
     return (
+        <article
+            className={[
+                "rounded-xl border p-5 transition-colors",
+                notification.is_read
+                    ? "border-border bg-card"
+                    : "border-primary/25 bg-primary/[0.035]",
+            ].join(" ")}
+        >
+            <div className="flex items-start gap-4">
+                <div
+                    className={[
+                        "flex size-10 shrink-0 items-center justify-center rounded-lg border",
+                        priority.iconClass,
+                    ].join(" ")}
+                >
+                    <Icon className="size-5" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <span
+                            className={[
+                                "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                                priority.badgeClass,
+                            ].join(" ")}
+                        >
+                            {
+                                priority.label
+                            }
+                        </span>
+
+                        <span
+                            className={[
+                                "inline-flex items-center gap-1 text-xs font-medium",
+                                notification.is_read
+                                    ? "text-muted-foreground"
+                                    : "text-foreground",
+                            ].join(" ")}
+                        >
+                            {notification.is_read ? (
+                                <>
+                                    <Check className="size-3" />
+                                    Sudah dibaca
+                                </>
+                            ) : (
+                                <>
+                                    <span className="size-1.5 rounded-full bg-primary" />
+                                    Belum dibaca
+                                </>
+                            )}
+                        </span>
+                    </div>
+
+                    <h2 className="mt-2 text-sm font-semibold leading-5 text-foreground">
+                        {
+                            notification.title
+                        }
+                    </h2>
+
+                    <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
+                        {
+                            notification.message
+                        }
+                    </p>
+
+                    <p
+                        className="mt-3 text-xs text-muted-foreground"
+                        title={absoluteTime(
+                            notification.created_at,
+                        )}
+                    >
+                        {relativeTime(
+                            notification.created_at,
+                        )}
+                    </p>
+                </div>
+
+                <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                    {!notification.is_read && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={
+                                markRead
+                            }
+                        >
+                            <Check data-icon="inline-start" />
+                            Tandai dibaca
+                        </Button>
+                    )}
+
+                    {notification.action_url && (
+                        <Button
+                            type="button"
+                            size="sm"
+                            onClick={
+                                openAction
+                            }
+                        >
+                            Buka
+                        </Button>
+                    )}
+                </div>
+            </div>
+        </article>
+    );
+}
+
+function NotificationPagination({
+    links = [],
+}) {
+    if (
+        links.length <= 3
+    ) {
+        return null;
+    }
+
+    return (
+        <nav
+            className="mt-6 flex flex-wrap items-center justify-center gap-1"
+            aria-label="Pagination notifikasi"
+        >
+            {links.map(
+                (
+                    link,
+                    index,
+                ) => {
+                    const label =
+                        paginationLabel(
+                            link.label,
+                        );
+
+                    const classes = [
+                        "inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border px-3 text-sm font-medium transition-colors",
+                        link.active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                    ].join(" ");
+
+                    if (!link.url) {
+                        return (
+                            <span
+                                key={`${link.label}-${index}`}
+                                className={`${classes} cursor-not-allowed opacity-40`}
+                                aria-disabled="true"
+                            >
+                                {
+                                    label
+                                }
+                            </span>
+                        );
+                    }
+
+                    return (
+                        <Link
+                            key={`${link.label}-${index}`}
+                            href={
+                                link.url
+                            }
+                            preserveScroll
+                            className={
+                                classes
+                            }
+                        >
+                            {
+                                label
+                            }
+                        </Link>
+                    );
+                },
+            )}
+        </nav>
+    );
+}
+
+export default function NotificationIndex({
+    notifications,
+}) {
+    const page =
+        usePage();
+
+    const role =
+        page.props?.auth
+            ?.user
+            ?.role ?? null;
+
+    const Layout =
+        resolveLayout(
+            role,
+        );
+
+    const items =
+        notifications?.data ?? [];
+
+    return (
         <>
             <Head title="Notifikasi" />
 
-            <main className="min-h-screen bg-slate-50 px-6 py-8">
+            <Layout
+                pageTitle="Notifikasi"
+                pageDescription="Tindakan, risiko, dan perubahan status operasional yang relevan untuk Anda."
+            >
                 <div className="mx-auto max-w-5xl">
-                    <div className="mb-6">
-                        <p className="text-sm font-medium text-slate-500">
-                            Notification Center
-                        </p>
-
-                        <h1 className="mt-1 text-2xl font-semibold text-slate-950">
-                            Notifikasi
-                        </h1>
-
-                        <p className="mt-2 max-w-2xl text-sm text-slate-600">
-                            Tinjau perubahan operasional,
-                            approval, risiko pasokan, dan
-                            status readiness yang memerlukan
-                            perhatian Anda.
-                        </p>
-                    </div>
-
                     {items.length === 0 ? (
-                        <div className="rounded-xl border border-slate-200 bg-white p-8">
-                            <p className="font-medium text-slate-900">
-                                Belum ada notifikasi.
-                            </p>
+                        <div className="rounded-xl border border-border bg-card px-6 py-10 text-center">
+                            <div className="mx-auto flex size-11 items-center justify-center rounded-xl border border-border bg-muted text-muted-foreground">
+                                <Bell className="size-5" />
+                            </div>
 
-                            <p className="mt-1 text-sm text-slate-500">
-                                Notifikasi operasional akan
-                                muncul di sini ketika ada
-                                perubahan yang relevan.
+                            <h2 className="mt-4 text-sm font-semibold text-foreground">
+                                Belum ada notifikasi
+                            </h2>
+
+                            <p className="mx-auto mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                                Notification terkait approval,
+                                risiko pasokan, fallback,
+                                readiness, dan Ready for
+                                Procurement akan muncul di sini.
                             </p>
                         </div>
                     ) : (
-                        <div className="space-y-3">
-                            {items.map(
-                                (notification) => (
-                                    <article
-                                        key={
-                                            notification.id
-                                        }
-                                        className={[
-                                            "rounded-xl border bg-white p-5",
-                                            notification.is_read
-                                                ? "border-slate-200"
-                                                : "border-slate-400",
-                                        ].join(" ")}
-                                    >
-                                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                                            <div className="min-w-0">
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                                        {priorityLabel(
-                                                            notification.priority,
-                                                        )}
-                                                    </span>
+                        <>
+                            <div className="mb-4 flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-medium text-foreground">
+                                        Notification Center
+                                    </p>
 
-                                                    {!notification.is_read && (
-                                                        <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-medium text-white">
-                                                            Baru
-                                                        </span>
-                                                    )}
-                                                </div>
+                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                        Urutan terbaru lebih dahulu.
+                                    </p>
+                                </div>
 
-                                                <h2 className="mt-2 font-semibold text-slate-950">
-                                                    {
-                                                        notification.title
-                                                    }
-                                                </h2>
+                                <p className="text-xs text-muted-foreground">
+                                    {
+                                        notifications.total
+                                    }{" "}
+                                    notifikasi
+                                </p>
+                            </div>
 
-                                                <p className="mt-1 text-sm leading-6 text-slate-600">
-                                                    {
-                                                        notification.message
-                                                    }
-                                                </p>
+                            <div className="space-y-3">
+                                {items.map(
+                                    (
+                                        notification,
+                                    ) => (
+                                        <NotificationCard
+                                            key={
+                                                notification.id
+                                            }
+                                            notification={
+                                                notification
+                                            }
+                                        />
+                                    ),
+                                )}
+                            </div>
 
-                                                <p className="mt-3 text-xs text-slate-500">
-                                                    {formatDateTime(
-                                                        notification.created_at,
-                                                    )}
-                                                </p>
-                                            </div>
-
-                                            <div className="flex shrink-0 gap-2">
-                                                {!notification.is_read && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            markRead(
-                                                                notification,
-                                                            )
-                                                        }
-                                                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                                                    >
-                                                        Tandai dibaca
-                                                    </button>
-                                                )}
-
-                                                {notification.action_url && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            openNotification(
-                                                                notification,
-                                                            )
-                                                        }
-                                                        className="rounded-lg bg-slate-950 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                                                    >
-                                                        Buka
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </article>
-                                ),
-                            )}
-                        </div>
+                            <NotificationPagination
+                                links={
+                                    notifications.links
+                                }
+                            />
+                        </>
                     )}
                 </div>
-            </main>
+            </Layout>
         </>
     );
 }

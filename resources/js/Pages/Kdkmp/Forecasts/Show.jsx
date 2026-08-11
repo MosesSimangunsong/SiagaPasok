@@ -21,14 +21,6 @@ import {
 } from "lucide-react";
 import KdkmpLayout from "@/Layouts/KdkmpLayout";
 import { Head, router } from "@inertiajs/react";
-import {
-    ArrowLeft,
-    Building2,
-    CalendarDays,
-    Clock3,
-    MapPin,
-    Send,
-} from "lucide-react";
 
 export default function Show({
     forecast,
