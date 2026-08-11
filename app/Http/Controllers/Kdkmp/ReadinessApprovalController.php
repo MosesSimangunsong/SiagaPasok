@@ -205,6 +205,46 @@ class ReadinessApprovalController extends Controller
                         $checklist
                             ->status
                             ->value,
+                    'prepared_by' =>
+    $checklist
+        ->preparedBy
+        ? [
+            'id' =>
+                $checklist
+                    ->preparedBy
+                    ->id,
+
+            'name' =>
+                $checklist
+                    ->preparedBy
+                    ->name,
+        ]
+        : null,
+
+'submitted_by' =>
+    $checklist
+        ->submittedBy
+        ? [
+            'id' =>
+                $checklist
+                    ->submittedBy
+                    ->id,
+
+            'name' =>
+                $checklist
+                    ->submittedBy
+                    ->name,
+        ]
+        : null,
+
+'submitted_at' =>
+    $checklist
+        ->submitted_at
+        ?->toIso8601String(),
+
+'review_reason' =>
+    $checklist
+        ->review_reason,
 
                     'organization' => [
                         'id' =>
