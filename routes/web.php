@@ -35,6 +35,7 @@ use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
 use App\Http\Controllers\Sppg\ForecastReadinessController;
 use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\Kdkmp\CommitmentCancellationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -510,6 +511,16 @@ Route::patch(
         );
     });
 
+    Route::post(
+    '/kdkmp/commitments/{commitment}/cancel',
+    [
+        CommitmentCancellationController::class,
+        'cancelDraft',
+    ]
+)->name(
+    'kdkmp.commitments.cancel'
+);
+
     Route::get(
         '/kdkmp/commitments/{commitment}',
         [
@@ -944,6 +955,8 @@ Route::middleware(
             |--------------------------------------------------------------------------
             */
 
+            
+
             Route::get(
                 '/approvals',
                 [
@@ -983,6 +996,28 @@ Route::middleware(
             )->name(
                 'approvals.reject'
             );
+
+            /*
+|--------------------------------------------------------------------------
+| Approved Commitment Cancellation
+|--------------------------------------------------------------------------
+|
+| Cancellation terhadap Commitment yang sudah menjadi
+| operational supply truth adalah explicit Manager decision.
+|
+| Tidak ada generic lifecycle PATCH.
+|
+*/
+
+Route::post(
+    '/commitments/{commitment}/cancel',
+    [
+        CommitmentCancellationController::class,
+        'cancelApproved',
+    ]
+)->name(
+    'commitments.cancel'
+);
 
             /*
             |--------------------------------------------------------------------------

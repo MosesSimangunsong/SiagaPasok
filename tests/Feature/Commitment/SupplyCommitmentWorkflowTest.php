@@ -1279,6 +1279,409 @@ public function test_commitment_expiry_is_system_audited_preserves_confidence_an
 }
 
 
+public function test_operator_can_cancel_draft_commitment_with_reason(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'CANCEL-DRAFT'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $observationsBefore =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->count();
+
+    $cancelled =
+        app(
+            CommitmentLifecycleService::class
+        )->cancel(
+            $context['operator'],
+            $commitment,
+            'Commitment DRAFT tidak dilanjutkan.'
+        );
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::CANCELLED,
+        $cancelled->lifecycle_status
+    );
+
+    $this->assertNotNull(
+        $cancelled->cancelled_at
+    );
+
+    $this->assertSame(
+        'Commitment DRAFT tidak dilanjutkan.',
+        $cancelled->cancellation_reason
+    );
+
+    $this->assertDatabaseHas(
+        'audit_logs',
+        [
+            'entity_type' =>
+                $commitment
+                    ->getMorphClass(),
+
+            'entity_id' =>
+                $commitment->id,
+
+            'source' =>
+                AuditSource::USER
+                    ->value,
+
+            'action' =>
+                'COMMITMENT_CANCELLED',
+
+            'actor_user_id' =>
+                $context['operator']->id,
+        ]
+    );
+
+    /*
+     * DRAFT belum pernah berkontribusi pada
+     * derived supply.
+     */
+    $this->assertSame(
+        $observationsBefore,
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->count()
+    );
+}
+
+public function test_pending_approval_commitment_cannot_be_cancelled(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'CANCEL-PENDING'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    try {
+        app(
+            CommitmentLifecycleService::class
+        )->cancel(
+            $context['operator'],
+            $commitment,
+            'Tidak dilanjutkan.'
+        );
+
+        $this->fail(
+            'Commitment PENDING_APPROVAL berhasil dibatalkan.'
+        );
+    } catch (
+        ValidationException $exception
+    ) {
+        $this->assertTrue(
+            $exception
+                ->errors()
+                !== []
+        );
+    }
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $commitment
+            ->fresh()
+            ->lifecycle_status
+    );
+}
+
+public function test_manager_can_cancel_approved_commitment_and_recompute_derived_state(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'CANCEL-APPROVED'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $workflow->approve(
+        $context['manager'],
+        $version
+    );
+
+    $commitment->refresh();
+
+    $observationsBefore =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->count();
+
+    $cancelled =
+        app(
+            CommitmentLifecycleService::class
+        )->cancel(
+            $context['manager'],
+            $commitment,
+            'Pasokan tidak lagi tersedia untuk Forecast.'
+        );
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::CANCELLED,
+        $cancelled->lifecycle_status
+    );
+
+    /*
+     * Historical approved/confidence state tidak
+     * dihapus oleh lifecycle cancellation.
+     */
+    $this->assertSame(
+        $version->id,
+        $cancelled->active_version_id
+    );
+
+    $this->assertSame(
+        SupplyConfidence::GREEN,
+        $cancelled->current_confidence
+    );
+
+    $this->assertSame(
+        $observationsBefore + 1,
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->count()
+    );
+
+    /*
+     * Idempotent retry.
+     */
+    app(
+        CommitmentLifecycleService::class
+    )->cancel(
+        $context['manager'],
+        $cancelled,
+        'Retry cancellation.'
+    );
+
+    $this->assertSame(
+        1,
+        \App\Models\AuditLog::query()
+            ->where(
+                'entity_type',
+                $commitment
+                    ->getMorphClass()
+            )
+            ->where(
+                'entity_id',
+                $commitment->id
+            )
+            ->where(
+                'action',
+                'COMMITMENT_CANCELLED'
+            )
+            ->count()
+    );
+}
+
+public function test_operator_cannot_cancel_approved_commitment(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'CANCEL-AUTHORITY'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $workflow->approve(
+        $context['manager'],
+        $version
+    );
+
+    $this->expectException(
+        AuthorizationException::class
+    );
+
+    app(
+        CommitmentLifecycleService::class
+    )->cancel(
+        $context['operator'],
+        $commitment->fresh(),
+        'Mencoba membatalkan approved Commitment.'
+    );
+}
+
+public function test_approved_commitment_with_open_revision_cannot_be_cancelled(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'CANCEL-REVISION'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $confidence =
+        app(
+            ConfidenceService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $workflow->approve(
+        $context['manager'],
+        $version
+    );
+
+    $confidence->downgrade(
+        actor:
+            $context['operator'],
+
+        commitment:
+            $commitment->fresh(),
+
+        toConfidence:
+            SupplyConfidence::YELLOW,
+
+        reasonCode:
+            'REVISION_REQUIRED',
+
+        reasonNote:
+            'Kondisi supply berubah.'
+    );
+
+    $workflow->createRevision(
+        $context['operator'],
+        $commitment->fresh(),
+        $this->revisionPayload(
+            $context
+        )
+    );
+
+    try {
+        app(
+            CommitmentLifecycleService::class
+        )->cancel(
+            $context['manager'],
+            $commitment->fresh(),
+            'Mencoba cancel ketika revision masih terbuka.'
+        );
+
+        $this->fail(
+            'Commitment dengan open revision berhasil dibatalkan.'
+        );
+    } catch (
+        ValidationException $exception
+    ) {
+        $this->assertTrue(true);
+    }
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $commitment
+            ->fresh()
+            ->lifecycle_status
+    );
+}
+
+
+
     private function createOperationalContext(
         string $suffix
     ): array {

@@ -8,6 +8,10 @@ use App\Enums\CommitmentLifecycleStatus;
 use App\Models\SupplyCommitment;
 use App\Services\Audit\AuditService;
 use App\Services\Notification\DerivedForecastStateObservationService;
+use App\Enums\RecoveryRequestStatus;
+use App\Models\ConfidenceRecoveryRequest;
+use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +20,10 @@ use Illuminate\Validation\ValidationException;
 final class CommitmentLifecycleService
 {
     private const AUDIT_EXPIRED =
-        'COMMITMENT_EXPIRED';
+    'COMMITMENT_EXPIRED';
+
+private const AUDIT_CANCELLED =
+    'COMMITMENT_CANCELLED';
 
     public function __construct(
         private readonly AuditService
@@ -26,6 +33,270 @@ final class CommitmentLifecycleService
             $derivedStateObservationService,
     ) {
     }
+
+
+    public function cancel(
+    User $actor,
+    SupplyCommitment $commitment,
+    string $reason,
+): SupplyCommitment {
+    $reason =
+        trim($reason);
+
+    if ($reason === '') {
+        throw ValidationException::withMessages([
+            'cancellation_reason' =>
+                'Alasan pembatalan Commitment wajib diisi.',
+        ]);
+    }
+
+    return DB::transaction(
+        function () use (
+            $actor,
+            $commitment,
+            $reason,
+        ): SupplyCommitment {
+            $this->assertKdkmpActor(
+                $actor
+            );
+
+            $current =
+                SupplyCommitment::query()
+                    ->whereKey(
+                        $commitment->getKey()
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+            $this->assertOwner(
+                $actor,
+                $current
+            );
+
+            /*
+             * Idempotent retry.
+             *
+             * Authority tetap diverifikasi berdasarkan
+             * bentuk Commitment yang dahulu dicancel.
+             */
+            if ($current->isCancelled()) {
+                $this->assertCancellationAuthority(
+                    $actor,
+                    $current->active_version_id
+                        !== null
+                );
+
+                return $current;
+            }
+
+            if (! $current->isActive()) {
+                throw ValidationException::withMessages([
+                    'lifecycle_status' => (
+                        'Hanya Commitment ACTIVE '
+                        .'yang dapat dibatalkan.'
+                    ),
+                ]);
+            }
+
+            /*
+             * Lock seluruh open version agar lifecycle
+             * decision tidak race dengan submit/revision.
+             */
+            $openVersions =
+                $current
+                    ->versions()
+                    ->whereIn(
+                        'approval_status',
+                        [
+                            CommitmentApprovalStatus
+                                ::DRAFT
+                                ->value,
+
+                            CommitmentApprovalStatus
+                                ::PENDING_APPROVAL
+                                ->value,
+                        ]
+                    )
+                    ->orderBy('id')
+                    ->lockForUpdate()
+                    ->get();
+
+            $hasPendingApproval =
+                $openVersions
+                    ->contains(
+                        fn ($version): bool =>
+                            $version
+                                ->approval_status
+                            === CommitmentApprovalStatus
+                                ::PENDING_APPROVAL
+                    );
+
+            if ($hasPendingApproval) {
+                throw ValidationException::withMessages([
+                    'lifecycle_status' => (
+                        'Commitment yang memiliki '
+                        .'Version PENDING_APPROVAL '
+                        .'tidak dapat dibatalkan.'
+                    ),
+                ]);
+            }
+
+            $hadApprovedVersion =
+                $current
+                    ->active_version_id
+                !== null;
+
+            if (! $hadApprovedVersion) {
+                /*
+                 * Pre-approval cancellation.
+                 *
+                 * Harus benar-benar memiliki current
+                 * DRAFT. Initial REJECTED tanpa Draft
+                 * baru tidak diam-diam dianggap DRAFT.
+                 */
+                $hasDraft =
+                    $openVersions
+                        ->contains(
+                            fn ($version): bool =>
+                                $version
+                                    ->approval_status
+                                === CommitmentApprovalStatus
+                                    ::DRAFT
+                        );
+
+                if (! $hasDraft) {
+                    throw ValidationException::withMessages([
+                        'lifecycle_status' => (
+                            'Commitment tanpa active '
+                            .'approved version hanya dapat '
+                            .'dibatalkan ketika masih '
+                            .'memiliki Version DRAFT.'
+                        ),
+                    ]);
+                }
+
+                $this->assertCancellationAuthority(
+                    $actor,
+                    false
+                );
+            } else {
+                /*
+                 * Approved Commitment tidak boleh
+                 * dicancel ketika revision masih terbuka.
+                 */
+                if ($openVersions->isNotEmpty()) {
+                    throw ValidationException::withMessages([
+                        'lifecycle_status' => (
+                            'Commitment belum dapat '
+                            .'dibatalkan karena masih '
+                            .'memiliki revision DRAFT '
+                            .'atau PENDING_APPROVAL.'
+                        ),
+                    ]);
+                }
+
+                /*
+                 * Jangan meninggalkan Recovery Request
+                 * PENDING_APPROVAL pada terminal
+                 * Commitment.
+                 */
+                $pendingRecovery =
+                    ConfidenceRecoveryRequest::query()
+                        ->where(
+                            'commitment_id',
+                            $current->id
+                        )
+                        ->where(
+                            'status',
+                            RecoveryRequestStatus
+                                ::PENDING_APPROVAL
+                                ->value
+                        )
+                        ->orderBy('id')
+                        ->lockForUpdate()
+                        ->first();
+
+                if ($pendingRecovery) {
+                    throw ValidationException::withMessages([
+                        'lifecycle_status' => (
+                            'Commitment belum dapat '
+                            .'dibatalkan karena masih '
+                            .'memiliki Recovery Request '
+                            .'PENDING_APPROVAL.'
+                        ),
+                    ]);
+                }
+
+                $this->assertCancellationAuthority(
+                    $actor,
+                    true
+                );
+            }
+
+            $before =
+                $this->snapshot(
+                    $current
+                );
+
+            $current->update([
+                'lifecycle_status' =>
+                    CommitmentLifecycleStatus
+                        ::CANCELLED,
+
+                'cancelled_at' =>
+                    now(),
+
+                'cancellation_reason' =>
+                    $reason,
+            ]);
+
+            $this->auditService->record(
+                actor:
+                    $actor,
+
+                source:
+                    AuditSource::USER,
+
+                action:
+                    self::AUDIT_CANCELLED,
+
+                entity:
+                    $current,
+
+                previousValue:
+                    $before,
+
+                newValue:
+                    $this->snapshot(
+                        $current
+                    ),
+
+                reasonNote:
+                    $reason,
+            );
+
+            /*
+             * DRAFT belum pernah masuk Safe Supply.
+             *
+             * Approved Commitment pernah menjadi
+             * operational supply truth, sehingga
+             * cancellation harus segera mengobservasi
+             * Forecast setelah commit.
+             */
+            if ($hadApprovedVersion) {
+                $this
+                    ->derivedStateObservationService
+                    ->observeAfterCommit(
+                        $current->forecast
+                    );
+            }
+
+            return $current
+                ->refresh();
+        }
+    );
+}
+
 
     public function expireIfDue(
         SupplyCommitment $commitment,
@@ -292,6 +563,61 @@ final class CommitmentLifecycleService
 
         return $expiredCount;
     }
+
+
+    private function assertKdkmpActor(
+    User $actor,
+): void {
+    if (
+        ! $actor->hasValidIdentityContext()
+        || (
+            ! $actor->isKdkmpOperator()
+            && ! $actor->isKdkmpManager()
+        )
+    ) {
+        throw new AuthorizationException(
+            'Hanya KDKMP Operator atau Manager aktif yang dapat membatalkan Commitment.'
+        );
+    }
+}
+
+private function assertOwner(
+    User $actor,
+    SupplyCommitment $commitment,
+): void {
+    if (
+        $actor->organization_id
+        !== $commitment->organization_id
+    ) {
+        throw new AuthorizationException(
+            'Commitment tersebut bukan milik organisasi KDKMP Anda.'
+        );
+    }
+}
+
+private function assertCancellationAuthority(
+    User $actor,
+    bool $hasApprovedVersion,
+): void {
+    if (
+        ! $hasApprovedVersion
+        && ! $actor->isKdkmpOperator()
+    ) {
+        throw new AuthorizationException(
+            'Commitment DRAFT hanya dapat dibatalkan oleh KDKMP Operator.'
+        );
+    }
+
+    if (
+        $hasApprovedVersion
+        && ! $actor->isKdkmpManager()
+    ) {
+        throw new AuthorizationException(
+            'Commitment APPROVED hanya dapat dibatalkan oleh KDKMP Manager.'
+        );
+    }
+}
+
 
     private function snapshot(
         SupplyCommitment $commitment,

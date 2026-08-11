@@ -8,6 +8,7 @@ use App\Enums\OrganizationType;
 use App\Enums\RecoveryRequestStatus;
 use App\Enums\SupplyConfidence;
 use App\Enums\UserRole;
+use App\Enums\CommitmentLifecycleStatus;
 use App\Models\Commodity;
 use App\Models\ConfidenceRecoveryRequest;
 use App\Models\Organization;
@@ -343,76 +344,87 @@ class CommitmentHttpContractTest extends TestCase
     }
 
     public function test_manager_http_surface_has_no_generic_payload_mutation_endpoint(): void
-    {
-        $managerRoutes =
-            collect(
-                Route::getRoutes()
-            )
-                ->filter(
-                    fn ($route) =>
-                        str_starts_with(
-                            $route->uri(),
-                            'kdkmp/manager/approvals'
-                        )
-                        || str_starts_with(
-                            $route->uri(),
-                            'kdkmp/manager/recoveries'
-                        )
-                );
-
-        /*
-         * Manager review surface hanya:
-         *
-         * GET review/queue
-         * POST explicit approve/reject commands.
-         *
-         * Tidak ada generic PUT/PATCH payload.
-         */
-        $this->assertFalse(
-            $managerRoutes->contains(
+{
+    $managerRoutes =
+        collect(
+            Route::getRoutes()
+        )
+            ->filter(
                 fn ($route) =>
-                    in_array(
-                        'PUT',
-                        $route->methods(),
-                        true
+                    str_starts_with(
+                        $route->uri(),
+                        'kdkmp/manager/approvals'
                     )
-                    || in_array(
-                        'PATCH',
-                        $route->methods(),
-                        true
+                    || str_starts_with(
+                        $route->uri(),
+                        'kdkmp/manager/recoveries'
                     )
-                    || in_array(
-                        'DELETE',
-                        $route->methods(),
-                        true
+                    || str_starts_with(
+                        $route->uri(),
+                        'kdkmp/manager/commitments'
                     )
-            )
-        );
+            );
 
-        $this->assertTrue(
-            Route::has(
-                'kdkmp.manager.approvals.approve'
-            )
-        );
+    /*
+     * Manager review surface hanya:
+     *
+     * GET review/queue
+     * POST explicit business commands.
+     *
+     * Tidak ada generic PUT/PATCH/DELETE
+     * untuk mutation payload/lifecycle.
+     */
+    $this->assertFalse(
+        $managerRoutes->contains(
+            fn ($route) =>
+                in_array(
+                    'PUT',
+                    $route->methods(),
+                    true
+                )
+                || in_array(
+                    'PATCH',
+                    $route->methods(),
+                    true
+                )
+                || in_array(
+                    'DELETE',
+                    $route->methods(),
+                    true
+                )
+        )
+    );
 
-        $this->assertTrue(
-            Route::has(
-                'kdkmp.manager.approvals.reject'
-            )
-        );
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.manager.approvals.approve'
+        )
+    );
 
-        $this->assertTrue(
-            Route::has(
-                'kdkmp.manager.recoveries.approve'
-            )
-        );
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.manager.approvals.reject'
+        )
+    );
 
-        $this->assertTrue(
-            Route::has(
-                'kdkmp.manager.recoveries.reject'
-            )
-        );
-    }
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.manager.recoveries.approve'
+        )
+    );
+
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.manager.recoveries.reject'
+        )
+    );
+
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.manager.commitments.cancel'
+        )
+    );
+}
 
     public function test_supply_commitment_has_no_hard_delete_route(): void
     {
@@ -446,6 +458,483 @@ class CommitmentHttpContractTest extends TestCase
         );
     }
 
+
+    public function test_operator_can_cancel_own_draft_commitment_through_explicit_command(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'HTTP-CANCEL-DRAFT'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $this->actingAs(
+        $context['operator']
+    )
+        ->post(
+            route(
+                'kdkmp.commitments.cancel',
+                $commitment
+            ),
+            [
+                'cancellation_reason' =>
+                    'Commitment DRAFT tidak dilanjutkan.',
+            ]
+        )
+        ->assertRedirect(
+            route(
+                'kdkmp.commitments.show',
+                $commitment
+            )
+        )
+        ->assertSessionHas(
+            'success'
+        );
+
+    $commitment->refresh();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::CANCELLED,
+        $commitment->lifecycle_status
+    );
+
+    $this->assertSame(
+        'Commitment DRAFT tidak dilanjutkan.',
+        $commitment->cancellation_reason
+    );
+
+    $this->assertNotNull(
+        $commitment->cancelled_at
+    );
+}
+
+public function test_draft_commitment_cancellation_requires_reason(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'HTTP-CANCEL-DRAFT-REASON'
+        );
+
+    $commitment =
+        app(
+            CommitmentWorkflowService::class
+        )->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $this->actingAs(
+        $context['operator']
+    )
+        ->from(
+            route(
+                'kdkmp.commitments.show',
+                $commitment
+            )
+        )
+        ->post(
+            route(
+                'kdkmp.commitments.cancel',
+                $commitment
+            ),
+            []
+        )
+        ->assertSessionHasErrors(
+            'cancellation_reason'
+        );
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $commitment
+            ->fresh()
+            ->lifecycle_status
+    );
+}
+
+
+public function test_manager_can_cancel_own_approved_commitment_through_explicit_command(): void
+{
+    $context =
+        $this->createApprovedCommitmentContext(
+            'HTTP-CANCEL-APPROVED'
+        );
+
+    $this->actingAs(
+        $context['manager']
+    )
+        ->post(
+            route(
+                'kdkmp.manager.commitments.cancel',
+                $context['commitment']
+            ),
+            [
+                'cancellation_reason' =>
+                    'Pasokan tidak lagi tersedia.',
+            ]
+        )
+        ->assertRedirect(
+            route(
+                'kdkmp.commitments.show',
+                $context['commitment']
+            )
+        )
+        ->assertSessionHas(
+            'success'
+        );
+
+    $commitment =
+        $context['commitment']
+            ->fresh();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::CANCELLED,
+        $commitment->lifecycle_status
+    );
+
+    $this->assertSame(
+        'Pasokan tidak lagi tersedia.',
+        $commitment->cancellation_reason
+    );
+
+    /*
+     * Historical approved state tetap ada.
+     */
+    $this->assertSame(
+        $context['version']->id,
+        $commitment->active_version_id
+    );
+
+    $this->assertSame(
+        SupplyConfidence::GREEN,
+        $commitment->current_confidence
+    );
+}
+
+
+public function test_operator_cannot_cancel_approved_commitment_and_manager_cannot_cancel_draft(): void
+{
+    $approved =
+        $this->createApprovedCommitmentContext(
+            'HTTP-CANCEL-ROLE-APPROVED'
+        );
+
+    $this->actingAs(
+        $approved['operator']
+    )
+        ->post(
+            route(
+                'kdkmp.commitments.cancel',
+                $approved['commitment']
+            ),
+            [
+                'cancellation_reason' =>
+                    'Operator mencoba cancel approved.',
+            ]
+        )
+        ->assertForbidden();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $approved['commitment']
+            ->fresh()
+            ->lifecycle_status
+    );
+
+    $draftContext =
+        $this->createOperationalContext(
+            'HTTP-CANCEL-ROLE-DRAFT'
+        );
+
+    $draft =
+        app(
+            CommitmentWorkflowService::class
+        )->createDraft(
+            $draftContext['operator'],
+            $this->commitmentPayload(
+                $draftContext
+            )
+        );
+
+    $this->actingAs(
+        $draftContext['manager']
+    )
+        ->post(
+            route(
+                'kdkmp.manager.commitments.cancel',
+                $draft
+            ),
+            [
+                'cancellation_reason' =>
+                    'Manager mencoba cancel draft.',
+            ]
+        )
+        ->assertForbidden();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $draft
+            ->fresh()
+            ->lifecycle_status
+    );
+}
+
+
+
+public function test_pending_approval_commitment_cannot_be_cancelled_through_http(): void
+{
+    $context =
+        $this->createPendingCommitmentContext(
+            'HTTP-CANCEL-PENDING'
+        );
+
+    $this->actingAs(
+        $context['operator']
+    )
+        ->post(
+            route(
+                'kdkmp.commitments.cancel',
+                $context['commitment']
+            ),
+            [
+                'cancellation_reason' =>
+                    'Mencoba cancel ketika pending.',
+            ]
+        )
+        ->assertSessionHasErrors(
+            'lifecycle_status'
+        );
+
+    $this->actingAs(
+        $context['manager']
+    )
+        ->post(
+            route(
+                'kdkmp.manager.commitments.cancel',
+                $context['commitment']
+            ),
+            [
+                'cancellation_reason' =>
+                    'Manager mencoba cancel ketika pending.',
+            ]
+        )
+        ->assertSessionHasErrors(
+            'lifecycle_status'
+        );
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $context['commitment']
+            ->fresh()
+            ->lifecycle_status
+    );
+
+    $this->assertSame(
+        CommitmentApprovalStatus::PENDING_APPROVAL,
+        $context['version']
+            ->fresh()
+            ->approval_status
+    );
+}
+
+
+
+public function test_commitment_cancellation_is_organization_scoped(): void
+{
+    $contextA =
+        $this->createOperationalContext(
+            'HTTP-CANCEL-TENANT-A'
+        );
+
+    $contextB =
+        $this->createOperationalContext(
+            'HTTP-CANCEL-TENANT-B'
+        );
+
+    $commitmentA =
+        app(
+            CommitmentWorkflowService::class
+        )->createDraft(
+            $contextA['operator'],
+            $this->commitmentPayload(
+                $contextA
+            )
+        );
+
+    $this->actingAs(
+        $contextB['operator']
+    )
+        ->post(
+            route(
+                'kdkmp.commitments.cancel',
+                $commitmentA
+            ),
+            [
+                'cancellation_reason' =>
+                    'Cross organization cancellation.',
+            ]
+        )
+        ->assertForbidden();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $commitmentA
+            ->fresh()
+            ->lifecycle_status
+    );
+}
+
+
+public function test_commitment_cancellation_uses_explicit_post_commands_without_generic_lifecycle_endpoint(): void
+{
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.commitments.cancel'
+        )
+    );
+
+    $this->assertTrue(
+        Route::has(
+            'kdkmp.manager.commitments.cancel'
+        )
+    );
+
+    $operatorRoute =
+        Route::getRoutes()
+            ->getByName(
+                'kdkmp.commitments.cancel'
+            );
+
+    $managerRoute =
+        Route::getRoutes()
+            ->getByName(
+                'kdkmp.manager.commitments.cancel'
+            );
+
+    $this->assertSame(
+        [
+            'POST',
+        ],
+        array_values(
+            array_filter(
+                $operatorRoute->methods(),
+                fn (string $method): bool =>
+                    $method !== 'HEAD'
+            )
+        )
+    );
+
+    $this->assertSame(
+        [
+            'POST',
+        ],
+        array_values(
+            array_filter(
+                $managerRoute->methods(),
+                fn (string $method): bool =>
+                    $method !== 'HEAD'
+            )
+        )
+    );
+
+    $commitmentRoutes =
+        collect(
+            Route::getRoutes()
+        )
+            ->filter(
+                fn ($route) =>
+                    str_contains(
+                        $route->uri(),
+                        'commitments'
+                    )
+            );
+
+    $this->assertFalse(
+        $commitmentRoutes->contains(
+            fn ($route) =>
+                in_array(
+                    'DELETE',
+                    $route->methods(),
+                    true
+                )
+        )
+    );
+}
+
+
+
+
+private function createApprovedCommitmentContext(
+    string $suffix
+): array {
+    $context =
+        $this->createOperationalContext(
+            $suffix
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $workflow->approve(
+        $context['manager'],
+        $version
+    );
+
+    $commitment->refresh();
+    $version->refresh();
+
+    $this->assertSame(
+        CommitmentApprovalStatus::APPROVED,
+        $version->approval_status
+    );
+
+    $this->assertSame(
+        $version->id,
+        $commitment->active_version_id
+    );
+
+    return [
+        ...$context,
+
+        'commitment' =>
+            $commitment,
+
+        'version' =>
+            $version,
+    ];
+}
     private function createPendingCommitmentContext(
         string $suffix
     ): array {
