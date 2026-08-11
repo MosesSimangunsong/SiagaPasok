@@ -33,6 +33,10 @@ use App\Http\Controllers\Kdkmp\ReadinessController;
 use App\Http\Controllers\Kdkmp\OperatorDashboardController;
 use App\Http\Controllers\Kdkmp\ContributorReadinessController;
 use App\Http\Controllers\Kdkmp\ManagerDashboardController;
+use App\Http\Controllers\Kdkmp\FulfilmentFeedbackController
+    as KdkmpFulfilmentFeedbackController;
+use App\Http\Controllers\Sppg\FulfilmentFeedbackController
+    as SppgFulfilmentFeedbackController;
 use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
@@ -311,6 +315,40 @@ Route::get(
                     'close',
                 ]
             )->name('forecasts.close');
+
+            Route::get(
+    '/fulfilments',
+    [
+        SppgFulfilmentFeedbackController::class,
+        'index',
+    ]
+)->name(
+    'fulfilments.index'
+);
+
+Route::get(
+    '/forecasts/{forecast}/fulfilments',
+    [
+        SppgFulfilmentFeedbackController::class,
+        'show',
+    ]
+)->name(
+    'fulfilments.show'
+);
+
+Route::post(
+    '/forecasts/{forecast}/fulfilments/{contributorOrganizationId}',
+    [
+        SppgFulfilmentFeedbackController::class,
+        'store',
+    ]
+)
+    ->whereNumber(
+        'contributorOrganizationId'
+    )
+    ->name(
+        'fulfilments.store'
+    );
         });
 
     /*
@@ -322,6 +360,39 @@ Route::get(
     | Role dan organization scope ditegakkan kembali oleh policy.
     |
     */
+    /*
+|--------------------------------------------------------------------------
+| KDKMP — Fulfilment Feedback
+|--------------------------------------------------------------------------
+|
+| Historical result dari proses resmi di luar
+| SiagaPasok.
+|
+| KDKMP hanya memperoleh organization-scoped
+| read access. Tidak ada create/update/delete
+| command pada surface ini.
+|
+*/
+
+Route::get(
+    '/kdkmp/fulfilments',
+    [
+        KdkmpFulfilmentFeedbackController::class,
+        'index',
+    ]
+)->name(
+    'kdkmp.fulfilments.index'
+);
+
+Route::get(
+    '/kdkmp/fulfilments/{fulfilmentFeedback}',
+    [
+        KdkmpFulfilmentFeedbackController::class,
+        'show',
+    ]
+)->name(
+    'kdkmp.fulfilments.show'
+);
 
     Route::get(
         '/kdkmp/forecasts',
