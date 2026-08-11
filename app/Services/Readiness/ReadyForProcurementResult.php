@@ -10,6 +10,7 @@ final readonly class ReadyForProcurementResult
      * @param array<int, int> $contributorOrganizationIds
      * @param array<int, ContributorReadinessResult> $contributorReadinessResults
      * @param array<int, string> $reasonCodes
+     *  @param array<int, string> $contributorSafeSupplyByOrganization
      */
     public function __construct(
         public int $forecastId,
@@ -26,8 +27,9 @@ public ?string $shortfall,
         public array $contributorReadinessResults,
         public bool $allContributorsLogisticsReady,
         public bool $allContributorsDocumentReady,
-        public bool $readyForProcurement,
-        public array $reasonCodes,
+public bool $readyForProcurement,
+public array $reasonCodes,
+public array $contributorSafeSupplyByOrganization = [],
     ) {
     }
 
@@ -72,6 +74,9 @@ public ?string $shortfall,
 
             'contributor_organization_ids' =>
                 $this->contributorOrganizationIds,
+            
+            'contributor_safe_supply_by_organization' =>
+    $this->contributorSafeSupplyByOrganization,
 
             'contributor_readiness' =>
                 array_map(

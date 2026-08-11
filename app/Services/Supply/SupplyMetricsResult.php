@@ -6,9 +6,10 @@ use Carbon\CarbonImmutable;
 
 final readonly class SupplyMetricsResult
 {
-    /**
-     * @param array<int, int> $contributorOrganizationIds
-     */
+/**
+ * @param array<int, int> $contributorOrganizationIds
+ * @param array<int, string> $contributorSafeSupplyByOrganization
+ */
     public function __construct(
         public int $forecastId,
         public CarbonImmutable $evaluatedAt,
@@ -21,8 +22,9 @@ final readonly class SupplyMetricsResult
         public ?string $coveragePercent,
         public string $shortfall,
         public string $surplus,
-        public array $contributorOrganizationIds,
-        public bool $volumeReady,
+public array $contributorOrganizationIds,
+public bool $volumeReady,
+public array $contributorSafeSupplyByOrganization = [],
     ) {
     }
 
@@ -65,6 +67,9 @@ final readonly class SupplyMetricsResult
 
             'contributor_organization_ids' =>
                 $this->contributorOrganizationIds,
+
+            'contributor_safe_supply_by_organization' =>
+    $this->contributorSafeSupplyByOrganization,
 
             'volume_ready' =>
                 $this->volumeReady,

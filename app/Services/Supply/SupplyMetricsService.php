@@ -99,8 +99,42 @@ final class SupplyMetricsService
             $metrics[
                 'volume_ready'
             ],
+        contributorSafeSupplyByOrganization:
+            $this->serializeContributorVolumes(
+                $metrics[
+                    'contributor_safe_supply_by_organization'
+                ]
+            ),
     );
 }
+
+    /**
+     * @param array<int, FixedScaleDecimal> $volumes
+     *
+     * @return array<int, string>
+     */
+    private function serializeContributorVolumes(
+        array $volumes,
+    ): array {
+        $serialized = [];
+
+        foreach (
+            $volumes
+            as $organizationId => $volume
+        ) {
+            $serialized[
+                (int) $organizationId
+            ] =
+                $volume->toString();
+        }
+
+        ksort(
+            $serialized,
+            SORT_NUMERIC
+        );
+
+        return $serialized;
+    }
 
     public function calculateDirectSafeSupply(
     DemandForecast $forecast,
@@ -356,26 +390,72 @@ $totalSafeSupply =
             ->greaterThanOrEqual(
                 $demandTarget
             );
-    $contributorOrganizationIds =
-    array_values(
-        array_unique([
-            ...$primaryBuckets[
-                'contributor_organization_ids'
-            ],
+/*
+ * Canonical per-organization Safe Supply.
+ *
+ * PRIMARY direct contribution dan NETWORK
+ * accepted fallback berasal dari calculation
+ * pass yang sama dengan total Safe Supply.
+ */
+$contributorSafeSupplyByOrganization =
+    $primaryBuckets[
+        'safe_supply_by_organization'
+    ];
 
-            ...$fallbackMetrics[
-                'contributor_organization_ids'
-            ],
-        ])
-    );
+foreach (
+    $fallbackMetrics[
+        'safe_supply_by_organization'
+    ]
+    as $organizationId => $volume
+) {
+    $organizationId =
+        (int) $organizationId;
+
+    if (
+        isset(
+            $contributorSafeSupplyByOrganization[
+                $organizationId
+            ]
+        )
+    ) {
+        $contributorSafeSupplyByOrganization[
+            $organizationId
+        ] =
+            $contributorSafeSupplyByOrganization[
+                $organizationId
+            ]->add(
+                $volume
+            );
+
+        continue;
+    }
+
+    $contributorSafeSupplyByOrganization[
+        $organizationId
+    ] =
+        $volume;
+}
 
 /*
- * Canonical result harus deterministic.
+ * Deterministic ordering.
  */
-sort(
-    $contributorOrganizationIds,
+ksort(
+    $contributorSafeSupplyByOrganization,
     SORT_NUMERIC
 );
+
+/*
+ * Contributor set sekarang berasal langsung
+ * dari organization buckets dengan effective
+ * Safe Supply > 0.
+ */
+$contributorOrganizationIds =
+    array_map(
+        'intval',
+        array_keys(
+            $contributorSafeSupplyByOrganization
+        )
+    );
 
     return [
         'forecast' =>
@@ -408,6 +488,9 @@ sort(
         'contributor_organization_ids' =>
     $contributorOrganizationIds,
 
+    'contributor_safe_supply_by_organization' =>
+    $contributorSafeSupplyByOrganization,
+
         'volume_ready' =>
             $volumeReady,
     ];
@@ -424,16 +507,19 @@ private function calculatePrimarySupplyBuckets(
     DemandForecast $forecast,
     CarbonImmutable $evaluatedAt,
 ): array {
-    $zeroResult = [
-        'direct_safe_supply' =>
-            FixedScaleDecimal::zero(),
+$zeroResult = [
+    'direct_safe_supply' =>
+        FixedScaleDecimal::zero(),
 
-        'at_risk_supply' =>
-            FixedScaleDecimal::zero(),
+    'at_risk_supply' =>
+        FixedScaleDecimal::zero(),
 
-        'contributor_organization_ids' =>
-            [],
-    ];
+    'contributor_organization_ids' =>
+        [],
+
+    'safe_supply_by_organization' =>
+        [],
+];
 
     /*
      * Forecast operational boundary sudah lewat.
@@ -565,23 +651,34 @@ private function calculatePrimarySupplyBuckets(
      *
      * At-Risk saja tidak cukup.
      */
-    $contributors =
-        $directSafe->isZero()
-            ? []
-            : [
-                $primaryOrganizationId,
-            ];
+$contributors =
+    $directSafe->isZero()
+        ? []
+        : [
+            $primaryOrganizationId,
+        ];
 
-    return [
-        'direct_safe_supply' =>
-            $directSafe,
+$safeSupplyByOrganization =
+    $directSafe->isZero()
+        ? []
+        : [
+            $primaryOrganizationId =>
+                $directSafe,
+        ];
 
-        'at_risk_supply' =>
-            $atRisk,
+return [
+    'direct_safe_supply' =>
+        $directSafe,
 
-        'contributor_organization_ids' =>
-            $contributors,
-    ];
+    'at_risk_supply' =>
+        $atRisk,
+
+    'contributor_organization_ids' =>
+        $contributors,
+
+    'safe_supply_by_organization' =>
+        $safeSupplyByOrganization,
+];
 }
 
     /**
@@ -594,13 +691,16 @@ private function calculateEffectiveFallbackMetricsForResolvedForecast(
     DemandForecast $forecast,
     CarbonImmutable $evaluatedAt,
 ): array {
-    $zeroResult = [
-        'fallback_safe_supply' =>
-            FixedScaleDecimal::zero(),
+$zeroResult = [
+    'fallback_safe_supply' =>
+        FixedScaleDecimal::zero(),
 
-        'contributor_organization_ids' =>
-            [],
-    ];
+    'contributor_organization_ids' =>
+        [],
+
+    'safe_supply_by_organization' =>
+        [],
+];
 
     /*
      * Setelah Forecast operational boundary,
@@ -704,6 +804,7 @@ private function calculateEffectiveFallbackMetricsForResolvedForecast(
 
     $contributors = [];
 
+    $safeSupplyByOrganization = [];
     foreach ($offers as $offer) {
         $request =
             $offer->fallbackRequest;
@@ -869,17 +970,48 @@ private function calculateEffectiveFallbackMetricsForResolvedForecast(
             continue;
         }
 
-        $totalFallbackSafe =
-            $totalFallbackSafe->add(
-                $effectiveOfferContribution
-            );
+$totalFallbackSafe =
+    $totalFallbackSafe->add(
+        $effectiveOfferContribution
+    );
 
-        /*
-         * Contributor identity = Organization.
-         * Tidak pernah Producer/Commitment.
-         */
-        $contributors[] =
-            $supplierOrganizationId;
+/*
+ * Breakdown menggunakan contribution yang
+ * sama persis dengan canonical Fallback Safe
+ * Supply.
+ *
+ * Beberapa ACCEPTED Offer dari supplier
+ * organization yang sama dijumlahkan ke satu
+ * organization bucket.
+ */
+if (
+    isset(
+        $safeSupplyByOrganization[
+            $supplierOrganizationId
+        ]
+    )
+) {
+    $safeSupplyByOrganization[
+        $supplierOrganizationId
+    ] =
+        $safeSupplyByOrganization[
+            $supplierOrganizationId
+        ]->add(
+            $effectiveOfferContribution
+        );
+} else {
+    $safeSupplyByOrganization[
+        $supplierOrganizationId
+    ] =
+        $effectiveOfferContribution;
+}
+
+/*
+ * Contributor identity = Organization.
+ * Tidak pernah Producer/Commitment.
+ */
+$contributors[] =
+    $supplierOrganizationId;
     }
 
     $contributors =
@@ -893,14 +1025,21 @@ private function calculateEffectiveFallbackMetricsForResolvedForecast(
         $contributors,
         SORT_NUMERIC
     );
+    ksort(
+    $safeSupplyByOrganization,
+    SORT_NUMERIC
+);
 
-    return [
-        'fallback_safe_supply' =>
-            $totalFallbackSafe,
+return [
+    'fallback_safe_supply' =>
+        $totalFallbackSafe,
 
-        'contributor_organization_ids' =>
-            $contributors,
-    ];
+    'contributor_organization_ids' =>
+        $contributors,
+
+    'safe_supply_by_organization' =>
+        $safeSupplyByOrganization,
+];
 }
 
     private function resolvePublishedForecast(

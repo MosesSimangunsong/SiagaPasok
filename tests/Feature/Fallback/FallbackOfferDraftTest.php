@@ -809,6 +809,25 @@ public function test_direct_and_accepted_fallback_combine_into_total_safe_supply
         $contributors
     );
 
+    $expectedContributorVolumes = [
+    $context['primary']->id =>
+        '250.000000',
+
+    $context['network']->id =>
+        '150.000000',
+];
+
+ksort(
+    $expectedContributorVolumes,
+    SORT_NUMERIC
+);
+
+$this->assertSame(
+    $expectedContributorVolumes,
+    $metrics
+        ->contributorSafeSupplyByOrganization
+);
+
     $this->assertTrue(
         $metrics->volumeReady
     );
@@ -2888,6 +2907,15 @@ public function test_same_network_supplier_across_multiple_accepted_offers_is_on
         $metrics
             ->contributorOrganizationIds
     );
+
+    $this->assertSame(
+    [
+        $context['network']->id =>
+            '150.000000',
+    ],
+    $metrics
+        ->contributorSafeSupplyByOrganization
+);
 }
 
 public function test_forecast_cancel_is_blocked_after_fallback_allocation_is_accepted(): void

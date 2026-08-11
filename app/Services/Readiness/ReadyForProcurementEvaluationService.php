@@ -209,6 +209,8 @@ coveragePercent:
                 reasonCodes: [
                     self::REASON_FORECAST_NOT_PUBLISHED,
                 ],
+                contributorSafeSupplyByOrganization:
+    [],
             );
         }
 
@@ -282,6 +284,10 @@ coveragePercent:
                 reasonCodes: [
                     self::REASON_FORECAST_WINDOW_ENDED,
                 ],
+                contributorSafeSupplyByOrganization:
+    $supplyMetrics
+        ->contributorSafeSupplyByOrganization,
+                
             );
         }
 
@@ -425,6 +431,9 @@ coveragePercent:
 
             reasonCodes:
                 $reasonCodes,
+                contributorSafeSupplyByOrganization:
+    $supplyMetrics
+        ->contributorSafeSupplyByOrganization,
         );
     }
 }
