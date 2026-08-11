@@ -5,13 +5,13 @@ namespace App\Services\Fulfilment;
 use App\Enums\AuditSource;
 use App\Enums\FulfilmentResult;
 use App\Models\DemandForecast;
-use App\Models\ForecastDerivedStateObservation;
 use App\Models\FulfilmentFeedback;
 use App\Models\Organization;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Support\FixedScaleDecimal;
 use Carbon\CarbonImmutable;
+use App\Models\ForecastDerivedStateObservation;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -23,10 +23,12 @@ final class FulfilmentFeedbackService
     public const AUDIT_RECORDED =
         'FULFILMENT_FEEDBACK_RECORDED';
 
-    public function __construct(
-        private readonly AuditService $auditService,
-    ) {
-    }
+public function __construct(
+    private readonly AuditService $auditService,
+    private readonly FulfilmentHandoffResolver
+        $handoffResolver,
+) {
+}
 
     public function record(
         User $actor,
@@ -70,6 +72,10 @@ final class FulfilmentFeedbackService
                     $currentForecast
                 );
 
+                $this->assertForecastEligibleForFulfilment(
+    $currentForecast
+);
+
                 $contributor =
                     $this
                         ->resolveContributorOrganization(
@@ -107,11 +113,12 @@ final class FulfilmentFeedbackService
                  * Source = historical RFP handoff
                  * snapshot dari M12-02.
                  */
-                $handoffObservation =
-                    $this
-                        ->resolveLatestRfpHandoffObservation(
-                            $currentForecast
-                        );
+$handoffObservation =
+    $this
+        ->handoffResolver
+        ->resolve(
+            $currentForecast
+        );
 
                 $plannedVolume =
                     $this
@@ -245,6 +252,24 @@ final class FulfilmentFeedbackService
         }
     }
 
+    private function assertForecastEligibleForFulfilment(
+    DemandForecast $forecast,
+): void {
+    if ($forecast->isClosed()) {
+        return;
+    }
+
+    throw ValidationException
+        ::withMessages([
+            'status' =>
+                (
+                    'Umpan Balik Pemenuhan hanya '
+                    .'dapat dicatat setelah Forecast '
+                    .'berstatus CLOSED.'
+                ),
+        ]);
+}
+
     private function resolveContributorOrganization(
         int $organizationId,
     ): Organization {
@@ -296,102 +321,8 @@ final class FulfilmentFeedbackService
      *
      * episode TRUE kedua menjadi handoff baru.
      */
-    private function resolveLatestRfpHandoffObservation(
-        DemandForecast $forecast,
-    ): ForecastDerivedStateObservation {
-        $observations =
-            ForecastDerivedStateObservation::query()
-                ->where(
-                    'forecast_id',
-                    $forecast->id
-                )
-                ->orderBy('id')
-                ->get();
 
-        $insideReadyEpisode = false;
 
-        $latestEpisodeSnapshot =
-            null;
-
-        foreach (
-            $observations
-            as $observation
-        ) {
-            if (
-                ! $observation
-                    ->ready_for_procurement
-            ) {
-                $insideReadyEpisode =
-                    false;
-
-                continue;
-            }
-
-            if (! $insideReadyEpisode) {
-                $insideReadyEpisode =
-                    true;
-
-                /*
-                 * Episode RFP baru:
-                 * snapshot episode lama tidak lagi
-                 * menjadi planned handoff terbaru.
-                 */
-                $latestEpisodeSnapshot =
-                    null;
-            }
-
-            /*
-             * Backward compatible:
-             *
-             * observation RFP lama sebelum M12-02
-             * mungkin mempunyai map NULL.
-             *
-             * Pilih first TRUE observation dalam
-             * episode yang sudah mempunyai map.
-             */
-            if (
-                $latestEpisodeSnapshot
-                    === null
-                && $this
-                    ->hasContributorVolumeSnapshot(
-                        $observation
-                    )
-            ) {
-                $latestEpisodeSnapshot =
-                    $observation;
-            }
-        }
-
-        if (
-            ! $latestEpisodeSnapshot
-        ) {
-            throw ValidationException
-                ::withMessages([
-                    'forecast_id' =>
-                        (
-                            'Forecast belum memiliki '
-                            .'historical Ready for '
-                            .'Procurement handoff '
-                            .'dengan contributor volume '
-                            .'snapshot.'
-                        ),
-                ]);
-        }
-
-        return $latestEpisodeSnapshot;
-    }
-
-    private function hasContributorVolumeSnapshot(
-        ForecastDerivedStateObservation $observation,
-    ): bool {
-        $volumes =
-            $observation
-                ->contributor_safe_supply_by_organization;
-
-        return
-            is_array($volumes)
-            && $volumes !== [];
-    }
 
     private function resolvePlannedVolume(
         ForecastDerivedStateObservation $observation,

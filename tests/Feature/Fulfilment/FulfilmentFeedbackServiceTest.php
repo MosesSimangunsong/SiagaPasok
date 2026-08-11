@@ -366,6 +366,61 @@ class FulfilmentFeedbackServiceTest extends TestCase
         );
     }
 
+    public function test_feedback_requires_closed_forecast_after_official_process(): void
+{
+    $context =
+        $this->createContext(
+            'NOT-CLOSED'
+        );
+
+    $this->createRfpHandoff(
+        $context,
+        '100.000000'
+    );
+
+    /*
+     * Historical RFP pernah tercapai, tetapi
+     * Forecast dibuka kembali sebagai PUBLISHED
+     * fixture untuk memastikan handoff saja
+     * tidak cukup memberi write authority.
+     */
+    $context['forecast']->update([
+        'status' =>
+            ForecastStatus::PUBLISHED,
+
+        'closed_at' =>
+            null,
+    ]);
+
+    try {
+        $this->service()
+            ->record(
+                $context['sppg_user'],
+                $context['forecast'],
+                $context[
+                    'contributor'
+                ]->id,
+                $this->validPayload()
+            );
+
+        $this->fail(
+            'Fulfilment sebelum Forecast CLOSED harus ditolak.'
+        );
+    } catch (
+        ValidationException $exception
+    ) {
+        $this->assertArrayHasKey(
+            'status',
+            $exception->errors()
+        );
+    }
+
+    $this->assertDatabaseCount(
+        'fulfilment_feedbacks',
+        0
+    );
+}
+
     public function test_feedback_rejects_organization_that_was_not_contributor_at_latest_handoff(): void
     {
         $context =
@@ -1151,14 +1206,18 @@ class FulfilmentFeedbackServiceTest extends TestCase
                 'freshness_interval_hours' =>
                     24,
 
-                'status' =>
-                    ForecastStatus::PUBLISHED,
+'status' =>
+    ForecastStatus::CLOSED,
 
                 'notes' =>
                     'Fulfilment fixture',
 
                 'published_at' =>
                     '2026-08-10 08:00:00',
+                  
+
+                'closed_at' =>
+    '2026-08-25 18:00:00',
 
                 'version' =>
                     1,
