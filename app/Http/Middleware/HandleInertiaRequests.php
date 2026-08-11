@@ -2,9 +2,9 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Notification;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
-use App\Models\Notification;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -31,18 +31,17 @@ class HandleInertiaRequests extends Middleware
             $user->loadMissing('organization');
         }
 
-        $unreadNotificationCount =
-    $user === null
-        ? 0
-        : Notification::query()
-            ->where(
-                'recipient_user_id',
-                $user->id
-            )
-            ->whereNull(
-                'read_at'
-            )
-            ->count();
+        $unreadNotificationCount = $user === null
+            ? 0
+            : Notification::query()
+                ->where(
+                    'recipient_user_id',
+                    $user->id
+                )
+                ->whereNull(
+                    'read_at'
+                )
+                ->count();
 
         return [
             ...parent::share($request),
@@ -56,40 +55,56 @@ class HandleInertiaRequests extends Middleware
                         'role' => $user->role?->value,
                         'role_label' => $user->role?->label(),
                         'is_active' => $user->is_active,
-                        'last_login_at' => $user->last_login_at?->toIso8601String(),
+                        'last_login_at' => $user
+                            ->last_login_at
+                            ?->toIso8601String(),
                         'organization' => $user->organization
                             ? [
                                 'id' => $user->organization->id,
                                 'code' => $user->organization->code,
                                 'name' => $user->organization->name,
-                                'organization_type' => $user->organization
+                                'organization_type' => $user
+                                    ->organization
                                     ->organization_type
                                     ->value,
                                 'organization_type_label' => $user
                                     ->organization
                                     ->organization_type
                                     ->label(),
-                                'is_active' => $user->organization->is_active,
+                                'is_active' => $user
+                                    ->organization
+                                    ->is_active,
                             ]
                             : null,
                     ]
                     : null,
             ],
 
-            'notification_center' => [
-    'unread_count' =>
-        $unreadNotificationCount,
+            'demo' => [
+                'enabled' => (bool) config(
+                    'siagapasok.demo.enabled',
+                    false
+                ),
+                'label' => (string) config(
+                    'siagapasok.demo.label',
+                    'SIMULASI'
+                ),
+            ],
 
-    'href' =>
-        $user
-            ? route(
-                'notifications.index'
-            )
-            : null,
-],
+            'notification_center' => [
+                'unread_count' => $unreadNotificationCount,
+
+                'href' => $user
+                    ? route(
+                        'notifications.index'
+                    )
+                    : null,
+            ],
 
             'flash' => [
-                'success' => fn () => $request->session()->get('success'),
+                'success' => fn () => $request
+                    ->session()
+                    ->get('success'),
             ],
         ];
     }

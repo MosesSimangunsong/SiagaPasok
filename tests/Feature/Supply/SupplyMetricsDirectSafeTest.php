@@ -1887,20 +1887,21 @@ public function test_canonical_result_array_uses_stable_external_field_names(): 
 
     $this->assertSame(
         [
-            'forecast_id',
-            'evaluated_at',
-            'unit_id',
-            'demand_target',
-            'direct_safe_supply',
-            'at_risk_supply',
-            'fallback_safe_supply',
-            'total_safe_supply',
-            'coverage_percent',
-            'shortfall',
-            'surplus',
-            'contributor_organization_ids',
-            'volume_ready',
-        ],
+    'forecast_id',
+    'evaluated_at',
+    'unit_id',
+    'demand_target',
+    'direct_safe_supply',
+    'at_risk_supply',
+    'fallback_safe_supply',
+    'total_safe_supply',
+    'coverage_percent',
+    'shortfall',
+    'surplus',
+    'contributor_organization_ids',
+    'contributor_safe_supply_by_organization',
+    'volume_ready',
+],
         array_keys($result)
     );
 

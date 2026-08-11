@@ -47,6 +47,10 @@ export default function AppShell({
 }) {
     const page = usePage();
 
+    const demoContext = page.props?.demo ?? {};
+    const demoEnabled = Boolean(demoContext.enabled);
+    const demoLabel = demoContext.label ?? "SIMULASI";
+
     const notificationCenter = page.props?.notification_center ?? {};
 
     const unreadNotificationCount = Number(
@@ -177,6 +181,21 @@ export default function AppShell({
                     </div>
 
                     <div className="ml-4 flex shrink-0 items-center gap-2">
+                        {demoEnabled && (
+                            <div
+                                className="flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-violet-700"
+                                aria-label={`Mode ${demoLabel}`}
+                                title="Environment simulasi SiagaPasok"
+                            >
+                                <span
+                                    className="size-1.5 rounded-full bg-violet-500"
+                                    aria-hidden="true"
+                                />
+
+                                <span>{demoLabel}</span>
+                            </div>
+                        )}
+
                         <Link
                             href={notificationHref}
                             className={[
