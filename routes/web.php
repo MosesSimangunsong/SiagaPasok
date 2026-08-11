@@ -31,6 +31,7 @@ use App\Http\Controllers\Kdkmp\DocumentRecordController;
 use App\Http\Controllers\Kdkmp\ReadinessApprovalController;
 use App\Http\Controllers\Kdkmp\ReadinessController;
 use App\Http\Controllers\Kdkmp\OperatorDashboardController;
+use App\Http\Controllers\Kdkmp\ContributorReadinessController;
 use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
@@ -657,6 +658,15 @@ Route::get(
 Route::middleware(
     'role:KDKMP_OPERATOR'
 )->group(function (): void {
+    
+    Route::get(
+    '/kdkmp/contributor-readiness/{forecast}',
+    ContributorReadinessController::class
+)->name(
+    'kdkmp.contributor-readiness.show'
+);
+
+
     Route::post(
         '/kdkmp/forecasts/{forecast}/readiness/{type}/prepare',
         [

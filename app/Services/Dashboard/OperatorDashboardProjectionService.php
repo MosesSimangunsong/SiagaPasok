@@ -793,12 +793,9 @@ $this->appendNetworkActions(
             'reason_codes' =>
                 $reasonCodes,
 
-            'href' =>
-                $checklist
-                    ? '/kdkmp/readiness/'
-                        .$checklist->id
-                    : '/kdkmp/forecasts/'
-                        .$forecast->id,
+'href' =>
+    '/kdkmp/contributor-readiness/'
+    .$forecast->id,
         ];
     }
 
