@@ -30,6 +30,7 @@ use App\Http\Controllers\Kdkmp\IncomingFallbackOfferController;
 use App\Http\Controllers\Kdkmp\DocumentRecordController;
 use App\Http\Controllers\Kdkmp\ReadinessApprovalController;
 use App\Http\Controllers\Kdkmp\ReadinessController;
+use App\Http\Controllers\Kdkmp\OperatorDashboardController;
 use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
@@ -1266,22 +1267,16 @@ Route::post(
 );
         });
 
-    Route::inertia(
-        '/kdkmp/operator',
-        'RoleLanding',
-        [
-            'workspace' => 'Workspace KDKMP',
-            'roleLabel' => 'KDKMP Operator / FRPL',
-            'description' => (
-                'Kelola data pasokan dan koordinasi '
-                .'operasional KDKMP.'
-            ),
-            'actionLabel' => 'Lihat Forecast PUBLISHED',
-            'actionHref' => '/kdkmp/forecasts',
-        ]
+    Route::get(
+    '/kdkmp/operator',
+    OperatorDashboardController::class
+)
+    ->middleware(
+        'role:KDKMP_OPERATOR'
     )
-        ->middleware('role:KDKMP_OPERATOR')
-        ->name('kdkmp.operator.dashboard');
+    ->name(
+        'kdkmp.operator.dashboard'
+    );
 
     Route::inertia(
         '/kdkmp/manager',

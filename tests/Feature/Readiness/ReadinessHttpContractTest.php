@@ -1492,6 +1492,98 @@ public function test_document_workspace_renders_only_reusable_organization_scope
         $serialized
     );
 }
+
+  public function test_operator_dashboard_exposes_canonical_supply_and_action_queue_contract(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'OPERATOR-DASHBOARD'
+        );
+
+    /*
+     * Approved 300 kg Commitment dari fixture
+     * diturunkan dari GREEN menjadi YELLOW.
+     *
+     * Canonical M06 harus menghasilkan:
+     * - Safe Supply = 0;
+     * - At-Risk = 300;
+     * - Shortfall = 300;
+     * - contributor set kosong.
+     *
+     * Dashboard tidak boleh menghitung ulang
+     * keadaan ini.
+     */
+    $context['commitment']->update([
+        'current_confidence' =>
+            SupplyConfidence::YELLOW,
+    ]);
+
+    $this->actingAs(
+        $context['operator']
+    )
+        ->get(
+            '/kdkmp/operator'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Operator/Dashboard'
+                    )
+                    ->where(
+                        'organization.id',
+                        $context['kdkmp']->id
+                    )
+                    ->where(
+                        'summary.active_forecast_count',
+                        1
+                    )
+                    ->where(
+                        'summary.action_count',
+                        2
+                    )
+                    ->has(
+                        'primaryForecasts',
+                        1
+                    )
+                    ->where(
+                        'primaryForecasts.0.forecast.id',
+                        $context['forecast']->id
+                    )
+                    ->where(
+                        'primaryForecasts.0.procurement_state.total_safe_supply',
+                        '0.000000'
+                    )
+                    ->where(
+                        'primaryForecasts.0.procurement_state.at_risk_supply',
+                        '300.000000'
+                    )
+                    ->where(
+                        'primaryForecasts.0.procurement_state.shortfall',
+                        '300.000000'
+                    )
+                    ->where(
+                        'primaryForecasts.0.procurement_state.volume_ready',
+                        false
+                    )
+                    ->where(
+                        'primaryForecasts.0.procurement_state.ready_for_procurement',
+                        false
+                    )
+                    ->where(
+                        'actionQueue.0.kind',
+                        'SUPPLY_RISK'
+                    )
+                    ->where(
+                        'actionQueue.1.kind',
+                        'FALLBACK_SHORTFALL'
+                    )
+        );
+}
+
     private function createSubmittedLogisticsChecklist(
         array $context,
         string $requirementCode,
