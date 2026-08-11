@@ -4,6 +4,7 @@ namespace Tests\Feature\Notification;
 
 use App\Enums\AuditSource;
 use App\Enums\CommitmentApprovalStatus;
+use App\Enums\ReadinessApprovalStatus;
 use App\Enums\CommitmentLifecycleStatus;
 use App\Enums\DocumentStatus;
 use App\Enums\ForecastStatus;
@@ -34,11 +35,13 @@ use App\Services\Readiness\DocumentRecordService;
 use App\Services\Readiness\ReadinessChecklistPreparationService;
 use App\Services\Readiness\ReadinessChecklistReviewService;
 use App\Services\Readiness\ReadinessChecklistWorkflowService;
+use App\Services\Readiness\ReadinessChecklistRevisionService;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Support\Facades\Artisan;
 use Tests\TestCase;
+use Illuminate\Support\Facades\DB;
 
 class DerivedForecastStateObservationTest extends TestCase
 {
@@ -55,12 +58,46 @@ class DerivedForecastStateObservationTest extends TestCase
         );
     }
 
-    protected function tearDown(): void
-    {
-        CarbonImmutable::setTestNow();
+protected function tearDown(): void
+{
+    CarbonImmutable::setTestNow();
 
-        parent::tearDown();
+    /*
+     * DatabaseMigrations melakukan DROP TABLE saat
+     * teardown.
+     *
+     * Readiness revision menggunakan legitimate
+     * self-referencing FK:
+     *
+     * V2.supersedes_checklist_id -> V1.id
+     *
+     * SQLite dapat menolak DROP TABLE
+     * readiness_checklists selama row self-reference
+     * tersebut masih ada.
+     *
+     * Cleanup ini hanya untuk lifecycle test schema.
+     * Production persistence/invariant tidak berubah.
+     */
+    if (
+        DB::getSchemaBuilder()
+            ->hasTable(
+                'readiness_checklists'
+            )
+    ) {
+        DB::table(
+            'readiness_checklists'
+        )
+            ->whereNotNull(
+                'supersedes_checklist_id'
+            )
+            ->update([
+                'supersedes_checklist_id' =>
+                    null,
+            ]);
     }
+
+    parent::tearDown();
+}
 
     public function test_first_positive_shortfall_establishes_baseline_without_notification(): void
     {
@@ -114,6 +151,8 @@ class DerivedForecastStateObservationTest extends TestCase
         );
     }
 
+
+    
     public function test_shortfall_growth_notifies_primary_operator_and_manager(): void
     {
         $context =
@@ -230,12 +269,22 @@ class DerivedForecastStateObservationTest extends TestCase
                 'RFP-REACHED'
             );
 
-        Notification::query()->delete();
-
-        $observation =
-            $this->observer()->observe(
-                $context['forecast']
-            );
+/*
+ * RFP reached harus sudah diamati secara causal
+ * ketika checklist readiness terakhir APPROVED.
+ */
+$observation =
+    ForecastDerivedStateObservation::query()
+        ->where(
+            'forecast_id',
+            $context['forecast']->id
+        )
+        ->where(
+            'ready_for_procurement',
+            true
+        )
+        ->latest('id')
+        ->firstOrFail();
 
         $this->assertTrue(
             $observation
@@ -336,6 +385,225 @@ class DerivedForecastStateObservationTest extends TestCase
         );
     }
 
+
+    public function test_readiness_revision_invalidates_gate_and_notifies_operator_and_manager(): void
+{
+    $context =
+        $this->createReadyContext(
+            'READINESS-REVISION'
+        );
+
+    $readyObservation =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->latest('id')
+            ->firstOrFail();
+
+    $this->assertTrue(
+        $readyObservation
+            ->ready_for_procurement
+    );
+
+    $approvedLogistics =
+        ReadinessChecklist::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->where(
+                'organization_id',
+                $context['kdkmp']->id
+            )
+            ->where(
+                'readiness_type',
+                ReadinessType::LOGISTICS
+                    ->value
+            )
+            ->where(
+                'is_current_version',
+                true
+            )
+            ->firstOrFail();
+
+    $this->assertTrue(
+        $approvedLogistics
+            ->isApproved()
+    );
+
+    Notification::query()->delete();
+
+    $revision =
+        app(
+            ReadinessChecklistRevisionService::class
+        )->createRevision(
+            $context['operator'],
+            $approvedLogistics
+        );
+
+    $approvedLogistics->refresh();
+
+    $this->assertFalse(
+        $approvedLogistics
+            ->is_current_version
+    );
+
+    $this->assertTrue(
+        $revision
+            ->is_current_version
+    );
+
+    $this->assertSame(
+        ReadinessApprovalStatus::DRAFT,
+        $revision->status
+    );
+
+    /*
+     * Dedicated Readiness invalidation warning.
+     */
+    $readinessDeduplicationKey =
+        'readiness-checklist:'
+        .$revision->id
+        .':invalidated';
+
+    foreach (
+        [
+            $context['operator'],
+            $context['manager'],
+        ]
+        as $recipient
+    ) {
+        $notification =
+            Notification::query()
+                ->where(
+                    'recipient_user_id',
+                    $recipient->id
+                )
+                ->where(
+                    'deduplication_key',
+                    $readinessDeduplicationKey
+                )
+                ->firstOrFail();
+
+        $this->assertSame(
+            NotificationType::READINESS,
+            $notification
+                ->notification_type
+        );
+
+        $this->assertSame(
+            NotificationPriority::WARNING,
+            $notification
+                ->priority
+        );
+
+        $this->assertSame(
+            '/kdkmp/readiness/'
+            .$revision->id,
+            $notification
+                ->action_url
+        );
+    }
+
+    /*
+     * SPPG tidak menerima private KDKMP
+     * readiness-edit CTA.
+     */
+    $this->assertDatabaseMissing(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['sppgUser']->id,
+
+            'deduplication_key' =>
+                $readinessDeduplicationKey,
+        ]
+    );
+
+    /*
+     * Causal M09 observation harus langsung
+     * melihat Logistics gate hilang.
+     */
+    $lostObservation =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->latest('id')
+            ->firstOrFail();
+
+    $this->assertFalse(
+        $lostObservation
+            ->ready_for_procurement
+    );
+
+    $this->assertContains(
+        'LOGISTICS_NOT_READY',
+        $lostObservation
+            ->reason_codes
+    );
+
+    $this->assertNotSame(
+        $readyObservation->id,
+        $lostObservation->id
+    );
+
+    /*
+     * RFP-lost tetap merupakan derived event
+     * tersendiri.
+     */
+    $rfpDeduplicationKey =
+        'derived-observation:'
+        .$lostObservation->id
+        .':rfp-lost';
+
+    $this->assertDatabaseHas(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['sppgUser']->id,
+
+            'notification_type' =>
+                NotificationType::RFP
+                    ->value,
+
+            'deduplication_key' =>
+                $rfpDeduplicationKey,
+        ]
+    );
+
+    $this->assertDatabaseHas(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['manager']->id,
+
+            'notification_type' =>
+                NotificationType::RFP
+                    ->value,
+
+            'deduplication_key' =>
+                $rfpDeduplicationKey,
+        ]
+    );
+
+    $this->assertSame(
+        1,
+        AuditLog::query()
+            ->where(
+                'entity_id',
+                $context['forecast']->id
+            )
+            ->where(
+                'action',
+                'READY_FOR_PROCUREMENT_LOST'
+            )
+            ->count()
+    );
+}
     public function test_rfp_loss_notifies_sppg_and_previous_contributor_manager(): void
     {
         $context =
@@ -343,11 +611,14 @@ class DerivedForecastStateObservationTest extends TestCase
                 'RFP-LOST'
             );
 
-        $ready =
-            $this->observer()->observe(
-                $context['forecast']
-            );
-
+$ready =
+    ForecastDerivedStateObservation::query()
+        ->where(
+            'forecast_id',
+            $context['forecast']->id
+        )
+        ->latest('id')
+        ->firstOrFail();
         $this->assertTrue(
             $ready
                 ->ready_for_procurement
@@ -481,10 +752,15 @@ class DerivedForecastStateObservationTest extends TestCase
                 'UNCHANGED'
             );
 
-        $first =
-            $this->observer()->observe(
-                $context['forecast']
-            );
+$first =
+    ForecastDerivedStateObservation::query()
+        ->where(
+            'forecast_id',
+            $context['forecast']->id
+        )
+        ->latest('id')
+        ->firstOrFail();
+
 
         $observationCount =
             ForecastDerivedStateObservation
@@ -566,13 +842,14 @@ class DerivedForecastStateObservationTest extends TestCase
         /*
          * Equality masih operationally valid.
          */
-        $ready =
-            $this->observer()->observe(
-                $context['forecast'],
-                CarbonImmutable::parse(
-                    '2026-08-25 17:00:00'
-                )
-            );
+$ready =
+    ForecastDerivedStateObservation::query()
+        ->where(
+            'forecast_id',
+            $context['forecast']->id
+        )
+        ->latest('id')
+        ->firstOrFail();
 
         $this->assertTrue(
             $ready
@@ -617,16 +894,53 @@ class DerivedForecastStateObservationTest extends TestCase
             $latest->reason_codes
         );
 
-        $this->assertSame(
-            2,
-            ForecastDerivedStateObservation
-                ::query()
-                ->where(
-                    'forecast_id',
-                    $context['forecast']->id
-                )
-                ->count()
-        );
+        $observations =
+    ForecastDerivedStateObservation::query()
+        ->where(
+            'forecast_id',
+            $context['forecast']->id
+        )
+        ->orderBy('id')
+        ->get();
+
+$this->assertCount(
+    3,
+    $observations
+);
+
+/*
+ * Observation 1:
+ * Logistics sudah APPROVED, tetapi Document
+ * readiness belum APPROVED.
+ */
+$this->assertFalse(
+    $observations[0]
+        ->ready_for_procurement
+);
+
+/*
+ * Observation 2:
+ * Logistics + Document sudah APPROVED.
+ */
+$this->assertTrue(
+    $observations[1]
+        ->ready_for_procurement
+);
+
+/*
+ * Observation 3:
+ * required_end_at telah terlewati.
+ */
+$this->assertFalse(
+    $observations[2]
+        ->ready_for_procurement
+);
+
+$this->assertContains(
+    'FORECAST_WINDOW_ENDED',
+    $observations[2]
+        ->reason_codes
+);
 
         $this->assertSame(
             1,

@@ -15,6 +15,7 @@ use App\Models\SupplyNetworkLink;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Notification\OperationalNotificationService;
+use App\Services\Notification\DerivedForecastStateObservationService;
 use App\Support\FixedScaleDecimal;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -77,6 +78,9 @@ private const AUDIT_REQUEST_FULFILLED =
 
     private readonly OperationalNotificationService
         $operationalNotificationService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
 ) {
 }
 
@@ -1515,6 +1519,16 @@ public function accept(
                 );
             }
 
+            /*
+ * ACCEPTED fallback baru masuk canonical Safe Supply.
+ *
+ * AVAILABLE/reserved alone tidak cukup.
+ */
+$this->derivedStateObservationService
+    ->observeAfterCommit(
+        $forecast
+    );
+    
             return $currentOffer;
         }
     );

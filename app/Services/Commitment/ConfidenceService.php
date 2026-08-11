@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Fallback\FallbackCapacityService;
 use App\Services\Notification\OperationalNotificationService;
+use App\Services\Notification\DerivedForecastStateObservationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -44,6 +45,9 @@ class ConfidenceService
 
     private readonly OperationalNotificationService
         $operationalNotificationService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
 ) {
 }
 
@@ -251,6 +255,11 @@ class ConfidenceService
     ->staleCommitmentDetected(
         $current,
         $event
+    );
+
+    $this->derivedStateObservationService
+    ->observeAfterCommit(
+        $current->forecast
     );
 
             return true;
@@ -672,6 +681,15 @@ if (
                             ->recovery_reason,
                 );
 
+                /*
+ * YELLOW -> GREEN dapat mengembalikan Safe Supply,
+ * menutup Shortfall, dan membuat RFP tercapai lagi.
+ */
+$this->derivedStateObservationService
+    ->observeAfterCommit(
+        $commitment->forecast
+    );
+
                 return $currentRecovery
                     ->refresh()
                     ->load([
@@ -1001,6 +1019,11 @@ $this->operationalNotificationService
     ->supplyConfidenceDowngraded(
         $current,
         $event
+    );
+
+    $this->derivedStateObservationService
+    ->observeAfterCommit(
+        $current->forecast
     );
 
     if ($fromConfidence === $toConfidence) {

@@ -302,6 +302,63 @@ public function readyForProcurementLost(
             );
     }
 }
+
+public function readinessRevisionInvalidated(
+    ReadinessChecklist $checklist,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperatorsAndManagers(
+                $checklist->organization_id
+            );
+
+    $readinessLabel =
+        match ($checklist->readiness_type) {
+            ReadinessType::LOGISTICS =>
+                'Logistics Readiness',
+
+            ReadinessType::DOCUMENT =>
+                'Document Readiness',
+        };
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::READINESS,
+
+                priority:
+                    NotificationPriority::WARNING,
+
+                title:
+                    $readinessLabel
+                    .' perlu diperbaiki',
+
+                message:
+                    $readinessLabel
+                    .' tidak lagi memenuhi gate karena '
+                    .'revision baru menjadi current DRAFT. '
+                    .'Lengkapi dan ajukan revision terbaru.',
+
+                relatedEntity:
+                    $checklist,
+
+                actionUrl:
+                    '/kdkmp/readiness/'
+                    .$checklist->id,
+
+                deduplicationKey:
+                    'readiness-checklist:'
+                    .$checklist->id
+                    .':invalidated',
+            );
+    }
+}
+
+
 public function supplyConfidenceDowngraded(
     SupplyCommitment $commitment,
     CommitmentConfidenceEvent $event,

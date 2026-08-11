@@ -18,6 +18,7 @@ use App\Models\FallbackRequest;
 use Illuminate\Support\Carbon;
 use App\Services\Audit\AuditService;
 use App\Services\Notification\OperationalNotificationService;
+use App\Services\Notification\DerivedForecastStateObservationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -62,6 +63,9 @@ class CommitmentWorkflowService
 
     private readonly OperationalNotificationService
         $operationalNotificationService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
 ) {
 }
 
@@ -971,6 +975,19 @@ return $currentVersion
                             'Initial approval established GREEN confidence.',
                     );
                 }
+
+                /*
+                 * Initial approval dapat menambah canonical
+                 * Safe Supply dan contributor.
+                 *
+                 * Revision approval yang belum GREEN mungkin
+                 * menghasilkan no-op observation; observer akan
+                 * mendeduplikasi state yang sama.
+                 */
+                $this->derivedStateObservationService
+                    ->observeAfterCommit(
+                        $forecast
+                    );
 
                 return $currentVersion
                     ->refresh()

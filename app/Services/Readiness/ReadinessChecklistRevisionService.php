@@ -4,12 +4,15 @@ namespace App\Services\Readiness;
 
 use App\Enums\AuditSource;
 use App\Enums\ReadinessApprovalStatus;
+use App\Enums\ReadinessType;
 use App\Models\DemandForecast;
 use App\Models\ReadinessChecklist;
 use App\Models\ReadinessItem;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Supply\SupplyMetricsService;
+use App\Services\Notification\DerivedForecastStateObservationService;
+use App\Services\Notification\OperationalNotificationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -20,16 +23,25 @@ final class ReadinessChecklistRevisionService
         'READINESS_REVISION_CREATED';
 
     public function __construct(
-        private readonly SupplyMetricsService
-            $supplyMetricsService,
+    private readonly SupplyMetricsService
+        $supplyMetricsService,
 
-        private readonly ReadinessRequirementResolver
-            $requirementResolver,
+    private readonly ReadinessRequirementResolver
+        $requirementResolver,
 
-        private readonly AuditService
-            $auditService,
-    ) {
-    }
+    private readonly ReadinessEvaluationService
+        $readinessEvaluationService,
+
+    private readonly AuditService
+        $auditService,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
+) {
+}
 
     public function createRevision(
         User $actor,
@@ -143,6 +155,36 @@ final class ReadinessChecklistRevisionService
                     $currentChecklist
                         ->organization_id
                 );
+
+                /*
+ * Ambil canonical M08 state SEBELUM current
+ * checklist diganti.
+ *
+ * Tidak cukup hanya mengecek status APPROVED:
+ * Document dapat sudah invalid/expired dan Forecast
+ * version dapat sudah stale.
+ */
+$readinessBeforeRevision =
+    $this->readinessEvaluationService
+        ->evaluateContributor(
+            $forecast,
+            $currentChecklist
+                ->organization_id
+        );
+
+$wasCurrentTypeReady =
+    match (
+        $currentChecklist
+            ->readiness_type
+    ) {
+        ReadinessType::LOGISTICS =>
+            $readinessBeforeRevision
+                ->logisticsReady,
+
+        ReadinessType::DOCUMENT =>
+            $readinessBeforeRevision
+                ->documentReady,
+    };
 
                 $organization =
                     $actor->organization;
@@ -348,7 +390,7 @@ final class ReadinessChecklistRevisionService
                                 ? $previousItem
                                     ->document_record_id
                                 : null,
-                                
+
                         'document_record_revision_no' =>
     null,
 
@@ -380,6 +422,31 @@ final class ReadinessChecklistRevisionService
                             $newChecklist->items
                         ),
                 );
+
+                /*
+ * Hanya actual TRUE -> FALSE readiness transition
+ * yang menghasilkan invalidation warning.
+ *
+ * Revision dari REJECTED atau already-invalid
+ * checklist tidak boleh menghasilkan false alarm.
+ */
+if ($wasCurrentTypeReady) {
+    $this->operationalNotificationService
+        ->readinessRevisionInvalidated(
+            $newChecklist
+        );
+}
+
+/*
+ * Current checklist telah berubah menjadi DRAFT.
+ * M09 evaluation dilakukan setelah root transaction
+ * commit supaya PostgreSQL dapat membentuk canonical
+ * REPEATABLE READ snapshot-nya sendiri.
+ */
+$this->derivedStateObservationService
+    ->observeAfterCommit(
+        $forecast
+    );
 
                 return $newChecklist;
             }

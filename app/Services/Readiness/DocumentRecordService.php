@@ -6,10 +6,14 @@ use App\Enums\AuditSource;
 use App\Enums\DocumentStatus;
 use App\Enums\ReadinessType;
 use App\Enums\RequirementScope;
+use App\Enums\ReadinessApprovalStatus;
+use App\Models\DemandForecast;
+use App\Models\ReadinessChecklist;
 use App\Models\DocumentRecord;
 use App\Models\ReadinessRequirement;
 use App\Models\User;
 use App\Services\Audit\AuditService;
+use App\Services\Notification\DerivedForecastStateObservationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -30,10 +34,13 @@ final class DocumentRecordService
         'DOCUMENT_RECORD_REVOKED';
 
     public function __construct(
-        private readonly AuditService
-            $auditService,
-    ) {
-    }
+    private readonly AuditService
+        $auditService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
+) {
+}
 
     public function create(
         User $actor,
@@ -289,6 +296,16 @@ final class DocumentRecordService
                         ),
                 );
 
+                /*
+ * revision_no berubah dan status kembali PENDING.
+ *
+ * Approved checklist yang membekukan revision lama
+ * langsung menjadi invalid secara derived.
+ */
+$this->observeAffectedForecastsAfterCommit(
+    $current
+);
+
                 return $current->refresh();
             }
         );
@@ -389,6 +406,16 @@ final class DocumentRecordService
                         ),
                 );
 
+                /*
+ * markValid juga menaikkan revision_no.
+ *
+ * Existing frozen readiness tidak otomatis direbase
+ * ke revision terbaru.
+ */
+$this->observeAffectedForecastsAfterCommit(
+    $current
+);
+
                 return $current->refresh();
             }
         );
@@ -467,10 +494,76 @@ final class DocumentRecordService
                     reasonNote: $reason,
                 );
 
+                $this->observeAffectedForecastsAfterCommit(
+    $current
+);
+
                 return $current->refresh();
             }
         );
     }
+
+    private function observeAffectedForecastsAfterCommit(
+    DocumentRecord $documentRecord,
+): void {
+    /*
+     * Hanya approved CURRENT Document Readiness
+     * yang saat ini dapat memengaruhi canonical M08.
+     *
+     * Historical/PENDING/REJECTED checklists bukan
+     * current readiness truth.
+     */
+    $forecastIds =
+        ReadinessChecklist::query()
+            ->where(
+                'readiness_type',
+                ReadinessType::DOCUMENT
+                    ->value
+            )
+            ->where(
+                'status',
+                ReadinessApprovalStatus
+                    ::APPROVED
+                    ->value
+            )
+            ->where(
+                'is_current_version',
+                true
+            )
+            ->whereHas(
+                'items',
+                fn ($query) =>
+                    $query->where(
+                        'document_record_id',
+                        $documentRecord->id
+                    )
+            )
+            ->orderBy('forecast_id')
+            ->pluck('forecast_id')
+            ->map(
+                static fn ($id): int =>
+                    (int) $id
+            )
+            ->unique()
+            ->values();
+
+    foreach ($forecastIds as $forecastId) {
+        $forecast =
+            DemandForecast::query()
+                ->find(
+                    $forecastId
+                );
+
+        if (! $forecast) {
+            continue;
+        }
+
+        $this->derivedStateObservationService
+            ->observeAfterCommit(
+                $forecast
+            );
+    }
+}
 
     private function validatePayload(
         array $data,

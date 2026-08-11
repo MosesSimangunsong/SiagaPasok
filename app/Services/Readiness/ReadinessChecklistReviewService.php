@@ -13,6 +13,7 @@ use App\Models\ReadinessItem;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Supply\SupplyMetricsService;
+use App\Services\Notification\DerivedForecastStateObservationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -27,16 +28,19 @@ final class ReadinessChecklistReviewService
         'READINESS_REJECTED';
 
     public function __construct(
-        private readonly SupplyMetricsService
-            $supplyMetricsService,
+    private readonly SupplyMetricsService
+        $supplyMetricsService,
 
-        private readonly DocumentRecordValidityService
-            $documentRecordValidityService,
+    private readonly DocumentRecordValidityService
+        $documentRecordValidityService,
 
-        private readonly AuditService
-            $auditService,
-    ) {
-    }
+    private readonly AuditService
+        $auditService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
+) {
+}
 
     public function approve(
         User $actor,
@@ -255,6 +259,16 @@ final class ReadinessChecklistReviewService
                             $items
                         ),
                 );
+
+                /*
+ * Readiness becomes canonical only after Manager
+ * approval. Submit/PENDING_APPROVAL must not trigger
+ * RFP recalculation as if it were approved.
+ */
+$this->derivedStateObservationService
+    ->observeAfterCommit(
+        $forecast
+    );
 
                 return $currentChecklist
                     ->refresh()

@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Enums\FallbackOfferStatus;
 use App\Models\FallbackOffer;
 use App\Services\Audit\AuditService;
+use App\Services\Notification\DerivedForecastStateObservationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -28,9 +29,13 @@ class DemandForecastService
     private const AUDIT_CLOSED = 'FORECAST_CLOSED';
 
     public function __construct(
-        private readonly AuditService $auditService,
-    ) {
-    }
+    private readonly AuditService
+        $auditService,
+
+    private readonly DerivedForecastStateObservationService
+        $derivedStateObservationService,
+) {
+}
 
     public function createDraft(
         User $actor,
@@ -198,6 +203,18 @@ class DemandForecastService
                 newValue: $this->snapshot($current),
             );
 
+            /*
+ * Establish initial derived observation only after
+ * Forecast publish transaction successfully commits.
+ *
+ * Initial positive Shortfall becomes baseline and
+ * does not create Shortfall notification.
+ */
+$this->derivedStateObservationService
+    ->observeAfterCommit(
+        $current
+    );
+
             return $current->refresh();
         });
     }
@@ -314,6 +331,16 @@ class DemandForecastService
                 reasonNote: $reason,
             );
 
+            /*
+ * Target volume / requirement window / Forecast
+ * version can change Shortfall, invalidate Readiness,
+ * or remove Ready for Procurement.
+ */
+$this->derivedStateObservationService
+    ->observeAfterCommit(
+        $current
+    );
+
             return $current->refresh();
         });
     }
@@ -383,6 +410,9 @@ $this->assertNoAcceptedFallbackAllocation(
     $current
 );
 
+$wasPublished =
+    $current->isPublished();
+
             $before = $this->snapshot($current);
 
             $current->update([
@@ -402,6 +432,20 @@ $this->assertNoAcceptedFallbackAllocation(
                 newValue: $this->snapshot($current),
                 reasonNote: $reason,
             );
+
+            /*
+ * DRAFT -> CANCELLED tidak mempunyai operational
+ * derived state yang perlu direcalculate.
+ *
+ * PUBLISHED -> CANCELLED dapat menyebabkan
+ * Ready for Procurement TRUE -> FALSE.
+ */
+if ($wasPublished) {
+    $this->derivedStateObservationService
+        ->observeAfterCommit(
+            $current
+        );
+}
 
             return $current->refresh();
         });
@@ -461,6 +505,11 @@ $this->assertNoAcceptedFallbackAllocation(
                 newValue: $this->snapshot($current),
             );
 
+            $this->derivedStateObservationService
+    ->observeAfterCommit(
+        $current
+    );
+    
             return $current->refresh();
         });
     }
