@@ -10,6 +10,8 @@ use App\Models\Producer;
 use App\Models\SupplyCommitment;
 use App\Models\User;
 use App\Models\FallbackOffer;
+use App\Enums\ReadinessType;
+use App\Models\ReadinessChecklist;
 
 final class DemoScenarioActionResolver
 {
@@ -83,7 +85,10 @@ final class DemoScenarioActionResolver
             );
         }
 
-        return null;
+        return $this->resolveReadinessAction(
+    $user,
+    $forecast
+);
     }
 
     /**
@@ -179,7 +184,10 @@ final class DemoScenarioActionResolver
             ];
         }
 
-        return null;
+        return $this->resolveReadinessAction(
+            $user,
+            $forecast
+        );
     }
 
     /**
@@ -242,7 +250,10 @@ final class DemoScenarioActionResolver
             }
         }
 
-        return null;
+        return $this->resolveReadinessAction(
+    $user,
+    $forecast
+);
     }
 
     /**
@@ -261,12 +272,20 @@ final class DemoScenarioActionResolver
                 $forecast
             );
 
-        if (
-            ! $fallbackRequest
-            || ! $fallbackRequest->isOpen()
-        ) {
-            return null;
-        }
+if (! $fallbackRequest) {
+    return null;
+}
+
+if ($fallbackRequest->isFulfilled()) {
+    return $this->resolveReadinessAction(
+        $user,
+        $forecast
+    );
+}
+
+if (! $fallbackRequest->isOpen()) {
+    return null;
+}
 
         $commitment =
             $this->resolveNetworkSourceCommitment(
@@ -358,12 +377,20 @@ final class DemoScenarioActionResolver
                 $forecast
             );
 
-        if (
-            ! $fallbackRequest
-            || ! $fallbackRequest->isOpen()
-        ) {
-            return null;
-        }
+if (! $fallbackRequest) {
+    return null;
+}
+
+if ($fallbackRequest->isFulfilled()) {
+    return $this->resolveReadinessAction(
+        $user,
+        $forecast
+    );
+}
+
+if (! $fallbackRequest->isOpen()) {
+    return null;
+}
 
         $commitment =
             $this->resolveNetworkSourceCommitment(
@@ -538,7 +565,183 @@ final class DemoScenarioActionResolver
             ->orderByDesc('id')
             ->first();
     }
-    
+
+
+    /**
+ * @return array{
+ *     key: string,
+ *     label: string,
+ *     route: string
+ * }|null
+ */
+private function resolveReadinessAction(
+    User $user,
+    DemandForecast $forecast
+): ?array {
+    $fallbackRequest =
+        $this->resolveDemoFallbackRequest(
+            $forecast
+        );
+
+    if (
+        ! $fallbackRequest
+        || ! $fallbackRequest->isFulfilled()
+    ) {
+        return null;
+    }
+
+    $offer =
+        $this->resolveDemoOffer(
+            $fallbackRequest
+        );
+
+    if (
+        ! $offer
+        || ! $offer->isAccepted()
+    ) {
+        return null;
+    }
+
+    $stages = [
+        [
+            'type' =>
+                ReadinessType::LOGISTICS,
+
+            'prepare_key' =>
+                'readiness_logistics_prepare',
+
+            'prepare_label' =>
+                'Siapkan Logistics Readiness',
+
+            'prepare_route' =>
+                'demo.scenario.readiness.logistics.prepare',
+
+            'approve_key' =>
+                'readiness_logistics_approve',
+
+            'approve_label' =>
+                'Approve Logistics Readiness',
+
+            'approve_route' =>
+                'demo.scenario.readiness.logistics.approve',
+        ],
+
+        [
+            'type' =>
+                ReadinessType::DOCUMENT,
+
+            'prepare_key' =>
+                'readiness_document_prepare',
+
+            'prepare_label' =>
+                'Siapkan Document Readiness',
+
+            'prepare_route' =>
+                'demo.scenario.readiness.document.prepare',
+
+            'approve_key' =>
+                'readiness_document_approve',
+
+            'approve_label' =>
+                'Approve Document Readiness',
+
+            'approve_route' =>
+                'demo.scenario.readiness.document.approve',
+        ],
+    ];
+
+    foreach ($stages as $stage) {
+        $checklist =
+            ReadinessChecklist::query()
+                ->where(
+                    'forecast_id',
+                    $forecast->id
+                )
+                ->where(
+                    'organization_id',
+                    $user->organization_id
+                )
+                ->where(
+                    'readiness_type',
+                    $stage['type']->value
+                )
+                ->where(
+                    'is_current_version',
+                    true
+                )
+                ->first();
+
+        if ($user->isKdkmpOperator()) {
+            if (
+                ! $checklist
+                || $checklist->isDraft()
+            ) {
+                return [
+                    'key' =>
+                        $stage[
+                            'prepare_key'
+                        ],
+
+                    'label' =>
+                        $stage[
+                            'prepare_label'
+                        ],
+
+                    'route' =>
+                        $stage[
+                            'prepare_route'
+                        ],
+                ];
+            }
+
+            if (
+                ! $checklist->isApproved()
+            ) {
+                return null;
+            }
+
+            continue;
+        }
+
+        if ($user->isKdkmpManager()) {
+            if (! $checklist) {
+                return null;
+            }
+
+            if (
+                $checklist
+                    ->isPendingApproval()
+            ) {
+                return [
+                    'key' =>
+                        $stage[
+                            'approve_key'
+                        ],
+
+                    'label' =>
+                        $stage[
+                            'approve_label'
+                        ],
+
+                    'route' =>
+                        $stage[
+                            'approve_route'
+                        ],
+                ];
+            }
+
+            if (
+                ! $checklist->isApproved()
+            ) {
+                return null;
+            }
+        }
+    }
+
+    return null;
+}
+
+
     private function isPrimaryOperator(
         User $user
     ): bool {

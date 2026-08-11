@@ -49,6 +49,7 @@ use App\Http\Controllers\Demo\DemoSupplyRiskController;
 use App\Http\Controllers\Demo\DemoFallbackRequestController;
 use App\Http\Controllers\Demo\DemoFallbackSourceController;
 use App\Http\Controllers\Demo\DemoFallbackOfferController;
+use App\Http\Controllers\Demo\DemoContributorReadinessController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -279,6 +280,84 @@ Route::post(
         'demo.scenario.fallback.offer.accept'
     );
 
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — Contributor Readiness
+|--------------------------------------------------------------------------
+|
+| Setiap effective contributor harus menyelesaikan:
+|
+| Operator prepare + submit
+| -> Manager approve
+|
+| untuk:
+| - Logistics Readiness
+| - Document Readiness
+|
+| Ready for Procurement tetap fully derived oleh M09.
+|
+*/
+
+Route::post(
+    '/demo/scenario/readiness/logistics',
+    [
+        DemoContributorReadinessController::class,
+        'prepareLogistics',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_OPERATOR',
+    ])
+    ->name(
+        'demo.scenario.readiness.logistics.prepare'
+    );
+
+Route::post(
+    '/demo/scenario/readiness/logistics/approve',
+    [
+        DemoContributorReadinessController::class,
+        'approveLogistics',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_MANAGER',
+    ])
+    ->name(
+        'demo.scenario.readiness.logistics.approve'
+    );
+
+Route::post(
+    '/demo/scenario/readiness/document',
+    [
+        DemoContributorReadinessController::class,
+        'prepareDocument',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_OPERATOR',
+    ])
+    ->name(
+        'demo.scenario.readiness.document.prepare'
+    );
+
+Route::post(
+    '/demo/scenario/readiness/document/approve',
+    [
+        DemoContributorReadinessController::class,
+        'approveDocument',
+    ]
+)
+    ->middleware([
+        'demo',
+        'role:KDKMP_MANAGER',
+    ])
+    ->name(
+        'demo.scenario.readiness.document.approve'
+    );
 
     /*
 |--------------------------------------------------------------------------
