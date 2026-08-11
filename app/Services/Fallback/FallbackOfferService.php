@@ -491,19 +491,24 @@ private const AUDIT_REQUEST_FULFILLED =
                 ]);
 
             $this->auditService->record(
-                actor: $actor,
-                source: AuditSource::USER,
-                action:
-                    self::AUDIT_SUBMITTED,
-                entity: $currentOffer,
-                previousValue: $before,
-                newValue:
-                    $this->snapshot(
-                        $currentOffer
-                    ),
-            );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_SUBMITTED,
+    entity: $currentOffer,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentOffer
+        ),
+);
 
-            return $currentOffer;
+$this->operationalNotificationService
+    ->fallbackOfferApprovalRequired(
+        $currentOffer
+    );
+
+return $currentOffer;
         }
     );
 }

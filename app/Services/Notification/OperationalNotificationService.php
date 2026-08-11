@@ -73,6 +73,52 @@ final class OperationalNotificationService
         }
     }
 
+
+    public function fallbackOfferApprovalRequired(
+    FallbackOffer $offer,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpManagers(
+                $offer
+                    ->supplier_organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::APPROVAL_REQUIRED,
+
+                priority:
+                    NotificationPriority
+                        ::ACTION,
+
+                title:
+                    'Fallback Offer perlu persetujuan',
+
+                message:
+                    'Fallback Offer telah disubmit '
+                    .'dan menunggu review Manager supplier.',
+
+                relatedEntity:
+                    $offer,
+
+                actionUrl:
+                    '/kdkmp/manager/outgoing-offers',
+
+                deduplicationKey:
+                    'fallback-offer:'
+                    .$offer->id
+                    .':approval-required',
+            );
+    }
+}
+
     public function fallbackOfferDecisionRequired(
         FallbackOffer $offer,
         FallbackRequest $request,
