@@ -1,7 +1,13 @@
 import { Button } from "@/components/ui/button";
 import AppShell from "@/Layouts/AppShell";
 import { router, usePage } from "@inertiajs/react";
-import { CheckCircle2, ClipboardList, LogOut } from "lucide-react";
+import {
+    Bell,
+    CheckCircle2,
+    ClipboardList,
+    LayoutDashboard,
+    LogOut,
+} from "lucide-react";
 
 function getInitials(name = "") {
     return name
@@ -23,14 +29,32 @@ export default function SppgLayout({
 
     const currentUrl = page.url;
 
-    const navigation = [
-        {
-            label: "Forecast Kebutuhan",
-            href: "/sppg/forecasts",
-            icon: ClipboardList,
-            active: currentUrl.startsWith("/sppg/forecasts"),
-        },
-    ];
+const navigation = [
+    {
+        label: "Dashboard",
+        href: "/sppg",
+        icon: LayoutDashboard,
+        active:
+            currentUrl ===
+            "/sppg",
+    },
+    {
+        label: "Forecast Kebutuhan",
+        href: "/sppg/forecasts",
+        icon: ClipboardList,
+        active: currentUrl.startsWith(
+            "/sppg/forecasts",
+        ),
+    },
+    {
+        label: "Notifikasi",
+        href: "/notifications",
+        icon: Bell,
+        active: currentUrl.startsWith(
+            "/notifications",
+        ),
+    },
+];
 
     const organizationName = auth?.user?.organization?.name ?? "SPPG";
 

@@ -37,6 +37,7 @@ use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
 use App\Http\Controllers\Sppg\ForecastReadinessController;
+use App\Http\Controllers\Sppg\SppgDashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Kdkmp\CommitmentCancellationController;
 use Illuminate\Support\Facades\Route;
@@ -214,12 +215,12 @@ Route::patch(
         ->name('sppg.')
         ->middleware('role:SPPG_USER')
         ->group(function (): void {
-            Route::get(
-                '/',
-                fn () => redirect()->route(
-                    'sppg.forecasts.index'
-                )
-            )->name('dashboard');
+Route::get(
+    '/',
+    SppgDashboardController::class
+)->name(
+    'dashboard'
+);
 
             Route::get(
                 '/forecasts',
