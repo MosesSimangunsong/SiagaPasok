@@ -43,14 +43,49 @@ final class DemoIdentifiers
     public const DEMO_PASSWORD =
         'SiagaPasokDemo2026!';
 
+    public const PRIMARY_PRODUCER_CODES = [
+        'DEMO-TS-P001',
+        'DEMO-TS-P002',
+        'DEMO-TS-P003',
+        'DEMO-TS-P004',
+        'DEMO-TS-P005',
+        'DEMO-TS-P006',
+        'DEMO-TS-P007',
+        'DEMO-TS-P008',
+        'DEMO-TS-P009',
+        'DEMO-TS-P010',
+        'DEMO-TS-P011',
+        'DEMO-TS-P012',
+    ];
+
+    public const NETWORK_PRODUCER_CODES = [
+        'DEMO-ML-P001',
+        'DEMO-ML-P002',
+        'DEMO-ML-P003',
+        'DEMO-ML-P004',
+        'DEMO-ML-P005',
+        'DEMO-ML-P006',
+    ];
+
+    public const FORECAST_CODE =
+        'DEMO-FRC-KANGKUNG-400';
+
+    public const FORECAST_TARGET_VOLUME =
+        '400.000000';
+
+    public const PRIMARY_BASELINE_PRODUCER_CODE =
+        'DEMO-TS-P001';
+
+    public const PRIMARY_BASELINE_VOLUME =
+        '250.000000';
+
+    public const PRIMARY_RISK_PRODUCER_CODE =
+        'DEMO-TS-P002';
+
+    public const PRIMARY_RISK_VOLUME =
+        '150.000000';
+
     /**
-     * Akun yang akan dipakai oleh presentation
-     * role-switch utility.
-     *
-     * System Admin sengaja tidak dimasukkan karena
-     * final operational demo berfokus pada SPPG dan
-     * dua KDKMP.
-     *
      * @return array<int, string>
      */
     public static function operationalAccountEmails(): array
@@ -61,6 +96,17 @@ final class DemoIdentifiers
             self::PRIMARY_MANAGER_EMAIL,
             self::NETWORK_OPERATOR_EMAIL,
             self::NETWORK_MANAGER_EMAIL,
+        ];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public static function producerCodes(): array
+    {
+        return [
+            ...self::PRIMARY_PRODUCER_CODES,
+            ...self::NETWORK_PRODUCER_CODES,
         ];
     }
 

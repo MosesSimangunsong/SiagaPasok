@@ -23,6 +23,8 @@ class DatabaseSeeder extends Seeder
         ) {
             $this->call([
                 DemoIdentitySeeder::class,
+                DemoSupplySeeder::class,
+                DemoBaselineScenarioSeeder::class,
             ]);
         }
     }
