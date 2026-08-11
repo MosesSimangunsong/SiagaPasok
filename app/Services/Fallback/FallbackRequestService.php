@@ -628,22 +628,33 @@ return $currentRequest
                 ]);
 
                 $this->auditService->record(
-                    actor: $actor,
-                    source: AuditSource::USER,
-                    action:
-                        self::AUDIT_REJECTED,
-                    entity: $currentRequest,
-                    previousValue: $before,
-                    newValue:
-                        $this->snapshot(
-                            $currentRequest
-                        ),
-                    reasonNote:
-                        $reviewReason,
-                );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_REJECTED,
+    entity: $currentRequest,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentRequest
+        ),
+    reasonNote:
+        $reviewReason,
+);
 
-                return $currentRequest
-                    ->refresh()
+/*
+ * UF-FR-02:
+ *
+ * Request tidak dibroadcast dan Operator maker
+ * perlu mengetahui bahwa review ditolak.
+ */
+$this->operationalNotificationService
+    ->fallbackRequestRejected(
+        $currentRequest
+    );
+
+return $currentRequest
+    ->refresh()
                     ->load([
                         'forecast',
                         'requesterOrganization',
@@ -852,20 +863,36 @@ return $currentRequest
                 }
 
                 $this->auditService->record(
-                    actor: $actor,
-                    source: AuditSource::USER,
-                    action:
-                        self::AUDIT_OFFER_REJECTED_REQUESTER,
-                    entity: $offer,
-                    previousValue:
-                        $offerBefore,
-                    newValue:
-                        $this->offerSnapshot(
-                            $offer
-                        ),
-                    reasonNote:
-                        $offerReason,
-                );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_OFFER_REJECTED_REQUESTER,
+    entity: $offer,
+    previousValue:
+        $offerBefore,
+    newValue:
+        $this->offerSnapshot(
+            $offer
+        ),
+    reasonNote:
+        $offerReason,
+);
+
+/*
+ * Parent Request cancellation melakukan
+ * requester-side rejection terhadap setiap
+ * AVAILABLE Offer.
+ *
+ * Supplier tidak boleh kehilangan Offer dari
+ * active state tanpa persistent notification.
+ */
+$this->operationalNotificationService
+    ->fallbackOfferRejectedByRequester(
+        $offer,
+        'Parent Fallback Request dibatalkan '
+        .'requester. Fallback Offer ditutup dan '
+        .'reserve terkait telah dilepas.'
+    );
             }
 
             $currentRequest->update([

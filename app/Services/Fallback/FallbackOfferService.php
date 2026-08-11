@@ -1528,7 +1528,7 @@ $this->derivedStateObservationService
     ->observeAfterCommit(
         $forecast
     );
-    
+
             return $currentOffer;
         }
     );
@@ -1760,21 +1760,36 @@ public function rejectByRequesterManager(
             );
 
             $this->auditService->record(
-                actor: $actor,
-                source: AuditSource::USER,
-                action:
-                    self::AUDIT_REJECTED_REQUESTER,
-                entity: $currentOffer,
-                previousValue: $before,
-                newValue:
-                    $this->snapshot(
-                        $currentOffer
-                    ),
-                reasonNote:
-                    $reason,
-            );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_REJECTED_REQUESTER,
+    entity: $currentOffer,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentOffer
+        ),
+    reasonNote:
+        $reason,
+);
 
-            return $currentOffer;
+/*
+ * UF-FO-05:
+ *
+ * AVAILABLE -> REJECTED
+ * Reserve sudah dilepas dan supplier perlu
+ * mengetahui keputusan requester.
+ *
+ * NotificationService akan persist hanya
+ * setelah transaction berhasil commit.
+ */
+$this->operationalNotificationService
+    ->fallbackOfferRejectedByRequester(
+        $currentOffer
+    );
+
+return $currentOffer;
         }
     );
 }
@@ -1844,6 +1859,16 @@ public function withdraw(
                 ]);
             }
 
+            /*
+ * Notification requester hanya berlaku bila
+ * Offer sudah pernah dipublikasikan AVAILABLE.
+ *
+ * DRAFT -> WITHDRAWN tidak pernah masuk
+ * decision queue requester.
+ */
+$wasAvailable =
+    $currentOffer->isAvailable();
+
             $before =
                 $this->snapshot(
                     $currentOffer
@@ -1899,21 +1924,37 @@ public function withdraw(
             );
 
             $this->auditService->record(
-                actor: $actor,
-                source: AuditSource::USER,
-                action:
-                    self::AUDIT_WITHDRAWN,
-                entity: $currentOffer,
-                previousValue: $before,
-                newValue:
-                    $this->snapshot(
-                        $currentOffer
-                    ),
-                reasonNote:
-                    $reason,
-            );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_WITHDRAWN,
+    entity: $currentOffer,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentOffer
+        ),
+    reasonNote:
+        $reason,
+);
 
-            return $currentOffer;
+/*
+ * UF-FO-06:
+ *
+ * Hanya AVAILABLE Offer yang sudah diketahui
+ * requester sehingga withdrawal-nya perlu
+ * menjadi persistent notification.
+ */
+if ($wasAvailable) {
+    $this->operationalNotificationService
+        ->fallbackOfferWithdrawnBySupplier(
+            $currentOffer,
+            $currentOffer
+                ->fallbackRequest
+        );
+}
+
+return $currentOffer;
         }
     );
 }

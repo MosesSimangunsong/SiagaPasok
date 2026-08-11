@@ -759,6 +759,159 @@ public function fallbackRequestOpened(
         }
     }
 
+
+    public function fallbackRequestRejected(
+    FallbackRequest $request,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperators(
+                $request
+                    ->requester_organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::FALLBACK_REQUEST,
+
+                priority:
+                    NotificationPriority
+                        ::ACTION,
+
+                title:
+                    'Fallback Request ditolak',
+
+                message:
+                    'Manager menolak Fallback Request. '
+                    .'Tinjau alasan review sebelum '
+                    .'menyiapkan request baru.',
+
+                relatedEntity:
+                    $request,
+
+                actionUrl:
+                    '/kdkmp/fallback-requests/'
+                    .$request->id,
+
+                deduplicationKey:
+                    'fallback-request:'
+                    .$request->id
+                    .':rejected',
+            );
+    }
+}
+
+public function fallbackOfferRejectedByRequester(
+    FallbackOffer $offer,
+    ?string $message = null,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpOperatorsAndManagers(
+                $offer
+                    ->supplier_organization_id
+            );
+
+    $notificationMessage =
+        $message
+        ?? (
+            'Requester memilih tidak menerima '
+            .'Fallback Offer. Reserve terkait '
+            .'telah dilepas.'
+        );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::FALLBACK_OFFER_DECISION,
+
+                priority:
+                    NotificationPriority
+                        ::INFORMATION,
+
+                title:
+                    'Fallback Offer ditolak requester',
+
+                message:
+                    $notificationMessage,
+
+                relatedEntity:
+                    $offer,
+
+                actionUrl:
+                    '/kdkmp/fallback-offers/'
+                    .$offer->id,
+
+                deduplicationKey:
+                    'fallback-offer:'
+                    .$offer->id
+                    .':rejected-by-requester',
+            );
+    }
+}
+
+public function fallbackOfferWithdrawnBySupplier(
+    FallbackOffer $offer,
+    FallbackRequest $request,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->kdkmpManagers(
+                $request
+                    ->requester_organization_id
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType
+                        ::FALLBACK_OFFER_DECISION,
+
+                priority:
+                    NotificationPriority
+                        ::WARNING,
+
+                title:
+                    'Fallback Offer ditarik supplier',
+
+                message:
+                    'Fallback Offer yang sebelumnya '
+                    .'AVAILABLE telah ditarik supplier '
+                    .'dan tidak lagi dapat diterima. '
+                    .'Tinjau kebutuhan fallback yang '
+                    .'masih terbuka.',
+
+                relatedEntity:
+                    $offer,
+
+                actionUrl:
+                    '/kdkmp/manager/incoming-offers/'
+                    .$offer->id,
+
+                deduplicationKey:
+                    'fallback-offer:'
+                    .$offer->id
+                    .':withdrawn-by-supplier',
+            );
+    }
+}
+
+
     public function readinessApprovalRequired(
         ReadinessChecklist $checklist,
     ): void {

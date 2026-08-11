@@ -14,6 +14,7 @@ use App\Models\SupplyNetworkLink;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\Fallback\FallbackRequestService;
+use App\Services\Notification\OperationalNotificationService;
 use App\Models\AuditLog;
 use Carbon\CarbonImmutable;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -568,9 +569,28 @@ class FallbackRequestServiceTest extends TestCase
                 $context['operator'],
                 $request
             );
+        
+        $notificationService =
+    $this->mock(
+        OperationalNotificationService::class
+    );
+
+$notificationService
+    ->shouldReceive(
+        'fallbackRequestRejected'
+    )
+    ->once()
+    ->withArgs(
+        fn (
+            $notifiedRequest
+        ): bool =>
+            $notifiedRequest->id
+            === $request->id
+    );
 
         $rejected =
-            $service->rejectBroadcast(
+    $this->service()
+        ->rejectBroadcast(
                 $context['manager'],
                 $request,
                 'Kebutuhan perlu dikaji ulang.'
