@@ -764,6 +764,193 @@ class ReadinessHttpContractTest extends TestCase
     );
 }
 
+public function test_sppg_forecast_detail_exposes_derived_procurement_summary_without_private_readiness_evidence(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'FORECAST-RFP-SUMMARY'
+        );
+
+    $this->createApprovedLogisticsChecklist(
+        $context,
+        'LOG-FORECAST-RFP-SUMMARY'
+    );
+
+    $documentContext =
+        $this->createApprovedDocumentChecklist(
+            $context,
+            'DOC-FORECAST-RFP-SUMMARY'
+        );
+
+    /*
+     * Fixture canonical:
+     *
+     * Demand       = 300
+     * Safe Supply  = 300
+     * Contributors = 1
+     * Logistics    = TRUE
+     * Document     = TRUE
+     *
+     * Maka derived RFP harus TRUE.
+     */
+    $response =
+        $this->actingAs(
+            $context['sppgUser']
+        )
+            ->get(
+                '/sppg/forecasts/'
+                .$context['forecast']->id
+            );
+
+    $response
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Sppg/Forecasts/Show'
+                    )
+                    ->where(
+                        'forecast.id',
+                        $context['forecast']->id
+                    )
+                    ->where(
+                        'procurementSummary.forecast_published',
+                        true
+                    )
+                    ->where(
+                        'procurementSummary.operationally_valid',
+                        true
+                    )
+                    ->where(
+                        'procurementSummary.volume_ready',
+                        true
+                    )
+                    ->where(
+                        'procurementSummary.all_contributors_logistics_ready',
+                        true
+                    )
+                    ->where(
+                        'procurementSummary.all_contributors_document_ready',
+                        true
+                    )
+                    ->where(
+                        'procurementSummary.contributor_count',
+                        1
+                    )
+                    ->where(
+                        'procurementSummary.ready_for_procurement',
+                        true
+                    )
+                    ->where(
+                        'procurementSummary.reason_codes',
+                        []
+                    )
+                    ->has(
+                        'procurementSummary.evaluated_at'
+                    )
+                    ->missing(
+                        'procurementSummary.contributor_readiness'
+                    )
+                    ->missing(
+                        'procurementSummary.contributor_organization_ids'
+                    )
+        );
+
+    $props =
+        $response
+            ->viewData(
+                'page'
+            )['props'] ?? [];
+
+    $this->assertIsArray(
+        $props
+    );
+
+    $summary =
+        $props[
+            'procurementSummary'
+        ] ?? null;
+
+    $this->assertIsArray(
+        $summary
+    );
+
+    /*
+     * Exact summary contract.
+     *
+     * Detail Forecast tidak perlu mengetahui
+     * siapa contributor atau internal evidence
+     * di balik status tersebut.
+     */
+    $this->assertSame(
+        [
+            'evaluated_at',
+            'forecast_published',
+            'operationally_valid',
+            'volume_ready',
+            'all_contributors_logistics_ready',
+            'all_contributors_document_ready',
+            'contributor_count',
+            'ready_for_procurement',
+            'reason_codes',
+        ],
+        array_keys(
+            $summary
+        )
+    );
+
+    $serialized =
+        json_encode(
+            $props
+        );
+
+    $this->assertIsString(
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        $context['producer']->name,
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        $documentContext[
+            'document'
+        ]->reference_number,
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        $documentContext[
+            'document'
+        ]->document_name,
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        'document_record_revision_no',
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        'readiness_checklist_id',
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        'producer_id',
+        $serialized
+    );
+
+    $this->assertStringNotContainsString(
+        'supply_commitment_id',
+        $serialized
+    );
+}
+
     public function test_sppg_cannot_open_private_kdkmp_readiness_workspace_by_direct_url(): void
     {
         $context =

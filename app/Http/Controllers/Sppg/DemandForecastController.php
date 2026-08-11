@@ -9,6 +9,7 @@ use App\Models\Commodity;
 use App\Models\DemandForecast;
 use App\Models\Unit;
 use App\Services\Forecast\DemandForecastService;
+use App\Services\Readiness\ReadyForProcurementEvaluationService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
@@ -93,31 +94,87 @@ class DemandForecastController extends Controller
     }
 
     public function show(
-        DemandForecast $forecast
-    ): Response {
-        Gate::authorize(
-            'view',
-            $forecast
-        );
+    DemandForecast $forecast,
+    ReadyForProcurementEvaluationService
+        $readyForProcurementEvaluationService,
+): Response {
+    Gate::authorize(
+        'view',
+        $forecast
+    );
 
-        $forecast->load([
-            'commodity',
-            'unit',
-            'createdBy',
-            'updatedBy',
-        ]);
+    $forecast->load([
+        'commodity',
+        'unit',
+        'createdBy',
+        'updatedBy',
+    ]);
 
-        return Inertia::render(
-            'Sppg/Forecasts/Show',
-            [
-                'forecast' =>
-                    $this->serializeForecast(
-                        $forecast,
-                        true
+    /*
+     * Canonical M09 evaluation.
+     *
+     * Detail Forecast hanya menerima summary.
+     * Contributor detail tetap berada pada
+     * /readiness.
+     */
+    $procurement =
+        $readyForProcurementEvaluationService
+            ->evaluate(
+                $forecast
+            );
+
+    return Inertia::render(
+        'Sppg/Forecasts/Show',
+        [
+            'forecast' =>
+                $this->serializeForecast(
+                    $forecast,
+                    true
+                ),
+
+            'procurementSummary' => [
+                'evaluated_at' =>
+                    $procurement
+                        ->evaluatedAt
+                        ->toIso8601String(),
+
+                'forecast_published' =>
+                    $procurement
+                        ->forecastPublished,
+
+                'operationally_valid' =>
+                    $procurement
+                        ->operationallyValid,
+
+                'volume_ready' =>
+                    $procurement
+                        ->volumeReady,
+
+                'all_contributors_logistics_ready' =>
+                    $procurement
+                        ->allContributorsLogisticsReady,
+
+                'all_contributors_document_ready' =>
+                    $procurement
+                        ->allContributorsDocumentReady,
+
+                'contributor_count' =>
+                    count(
+                        $procurement
+                            ->contributorOrganizationIds
                     ),
-            ]
-        );
-    }
+
+                'ready_for_procurement' =>
+                    $procurement
+                        ->readyForProcurement,
+
+                'reason_codes' =>
+                    $procurement
+                        ->reasonCodes,
+            ],
+        ]
+    );
+}
 
     public function edit(
         DemandForecast $forecast

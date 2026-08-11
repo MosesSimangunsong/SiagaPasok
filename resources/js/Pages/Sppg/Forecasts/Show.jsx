@@ -65,7 +65,10 @@ function toLocalDateTime(value) {
     ].join("");
 }
 
-export default function Show({ forecast }) {
+export default function Show({
+    forecast,
+    procurementSummary,
+}) {
     const [activeAction, setActiveAction] =
         useState(null);
 
@@ -178,30 +181,36 @@ export default function Show({ forecast }) {
 }
             >
                 <div className="space-y-6">
-                    <div className="grid gap-4 md:grid-cols-3">
-                        <SummaryCard
-                            label="Status"
-                            value={
-                                forecast.status_label
-                            }
-                        />
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <SummaryCard
+        label="Status"
+        value={
+            forecast.status_label
+        }
+    />
 
-                        <SummaryCard
-                            label="Target Volume"
-                            value={formatVolume(
-                                forecast,
-                            )}
-                        />
+    <SummaryCard
+        label="Target Volume"
+        value={formatVolume(
+            forecast,
+        )}
+    />
 
-                        <SummaryCard
-                            label="Freshness Interval"
-                            value={
-                                forecast.freshness_interval_hours
-                                    ? `${forecast.freshness_interval_hours} jam`
-                                    : "Tidak ditentukan"
-                            }
-                        />
-                    </div>
+    <SummaryCard
+        label="Freshness Interval"
+        value={
+            forecast.freshness_interval_hours
+                ? `${forecast.freshness_interval_hours} jam`
+                : "Tidak ditentukan"
+        }
+    />
+
+    <ProcurementSummaryCard
+        summary={
+            procurementSummary
+        }
+    />
+</div>
 
                     <Card>
                         <CardHeader className="border-b">
@@ -905,6 +914,76 @@ function CancelPanel({
     );
 }
 
+
+function ProcurementSummaryCard({
+    summary,
+}) {
+    const ready =
+        summary
+            ?.ready_for_procurement ===
+        true;
+
+    const primaryReason =
+        summary
+            ?.reason_codes?.[0] ??
+        null;
+
+    return (
+        <Card
+            className={
+                ready
+                    ? "border-primary/30"
+                    : "border-amber-500/30"
+            }
+        >
+            <CardContent>
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-sm text-muted-foreground">
+                            Ready for Procurement
+                        </p>
+
+                        <p className="mt-2 text-lg font-semibold text-foreground">
+                            {ready
+                                ? "READY"
+                                : "BELUM READY"}
+                        </p>
+                    </div>
+
+                    <div
+                        className={[
+                            "flex size-9 shrink-0 items-center justify-center rounded-lg",
+                            ready
+                                ? "bg-primary/10 text-primary"
+                                : "bg-amber-500/10 text-amber-700",
+                        ].join(" ")}
+                    >
+                        {ready ? (
+                            <CheckCircle2 className="size-4" />
+                        ) : (
+                            <Clock3 className="size-4" />
+                        )}
+                    </div>
+                </div>
+
+                <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    {ready
+                        ? `${summary.contributor_count} contributor efektif telah memenuhi seluruh gate.`
+                        : procurementReasonLabel(
+                              primaryReason,
+                          )}
+                </p>
+
+                <p className="mt-2 text-[11px] leading-4 text-muted-foreground">
+                    Status derived otomatis,
+                    bukan ditetapkan manual.
+                </p>
+            </CardContent>
+        </Card>
+    );
+}
+
+
 function SummaryCard({ label, value }) {
     return (
         <Card>
@@ -978,6 +1057,35 @@ function ForecastStatusBadge({ forecast }) {
         </span>
     );
 }
+
+
+function procurementReasonLabel(code) {
+    const labels = {
+        FORECAST_NOT_PUBLISHED:
+            "Forecast belum dipublikasikan.",
+
+        FORECAST_WINDOW_ENDED:
+            "Periode operasional Forecast telah berakhir.",
+
+        VOLUME_NOT_READY:
+            "Safe Supply belum memenuhi target kebutuhan.",
+
+        NO_EFFECTIVE_CONTRIBUTORS:
+            "Belum ada contributor dengan effective Safe Supply.",
+
+        LOGISTICS_NOT_READY:
+            "Logistics Readiness contributor belum seluruhnya terpenuhi.",
+
+        DOCUMENT_NOT_READY:
+            "Document Readiness contributor belum seluruhnya terpenuhi.",
+    };
+
+    return (
+        labels[code] ??
+        "Dependency procurement belum seluruhnya terpenuhi."
+    );
+}
+
 
 function formatVolume(forecast) {
     const number = Number(forecast.target_volume);
