@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'status',
     'notes',
     'created_by',
+    'revision_no',
 ])]
 class DocumentRecord extends Model
 {
@@ -29,6 +30,8 @@ class DocumentRecord extends Model
 
             'expires_at' =>
                 'datetime',
+            'revision_no' =>
+    'integer',
 
             'status' =>
                 DocumentStatus::class,

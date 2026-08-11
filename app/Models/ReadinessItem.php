@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'document_record_id',
     'value_json',
     'updated_by',
+    'document_record_revision_no',
 ])]
 class ReadinessItem extends Model
 {
@@ -29,6 +30,9 @@ class ReadinessItem extends Model
 
             'value_json' =>
                 'array',
+                
+            'document_record_revision_no' =>
+    'integer',
         ];
     }
 
