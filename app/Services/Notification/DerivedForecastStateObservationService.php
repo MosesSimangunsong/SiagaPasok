@@ -160,18 +160,25 @@ final class DerivedForecastStateObservationService
                         $evaluation
                             ->readyForProcurement,
 
-                    'contributor_organization_ids' =>
-                        $this
-                            ->normalizeOrganizationIds(
-                                $evaluation
-                                    ->contributorOrganizationIds
-                            ),
+'contributor_organization_ids' =>
+    $this
+        ->normalizeOrganizationIds(
+            $evaluation
+                ->contributorOrganizationIds
+        ),
 
-                    'reason_codes' =>
-                        array_values(
-                            $evaluation
-                                ->reasonCodes
-                        ),
+'contributor_safe_supply_by_organization' =>
+    $this
+        ->normalizeContributorVolumes(
+            $evaluation
+                ->contributorSafeSupplyByOrganization
+        ),
+
+'reason_codes' =>
+    array_values(
+        $evaluation
+            ->reasonCodes
+    ),
 
                     'evaluated_at' =>
                         $evaluation
@@ -477,16 +484,25 @@ final class DerivedForecastStateObservationService
                 === $current[
                     'ready_for_procurement'
                 ]
-            && $this
-                ->normalizeOrganizationIds(
-                    $previous
-                        ->contributor_organization_ids
-                    ?? []
-                )
-                === $current[
-                    'contributor_organization_ids'
-                ]
-            && array_values(
+&& $this
+    ->normalizeOrganizationIds(
+        $previous
+            ->contributor_organization_ids
+        ?? []
+    )
+    === $current[
+        'contributor_organization_ids'
+    ]
+&& $this
+    ->normalizeContributorVolumes(
+        $previous
+            ->contributor_safe_supply_by_organization
+        ?? []
+    )
+    === $current[
+        'contributor_safe_supply_by_organization'
+    ]
+&& array_values(
                 $previous->reason_codes
                 ?? []
             )
@@ -542,6 +558,36 @@ final class DerivedForecastStateObservationService
         return $normalized;
     }
 
+    /**
+ * @param array<int|string, mixed> $volumes
+ *
+ * @return array<int, string>
+ */
+private function normalizeContributorVolumes(
+    array $volumes,
+): array {
+    $normalized = [];
+
+    foreach (
+        $volumes
+        as $organizationId => $volume
+    ) {
+        $normalized[
+            (int) $organizationId
+        ] =
+            FixedScaleDecimal::from(
+                (string) $volume
+            )->toString();
+    }
+
+    ksort(
+        $normalized,
+        SORT_NUMERIC
+    );
+
+    return $normalized;
+}
+
     private function previousAuditSnapshot(
         ?ForecastDerivedStateObservation $previous,
     ): array {
@@ -588,13 +634,17 @@ final class DerivedForecastStateObservationService
                 $observation
                     ->ready_for_procurement,
 
-            'contributor_organization_ids' =>
-                $observation
-                    ->contributor_organization_ids,
+'contributor_organization_ids' =>
+    $observation
+        ->contributor_organization_ids,
 
-            'reason_codes' =>
-                $observation
-                    ->reason_codes,
+'contributor_safe_supply_by_organization' =>
+    $observation
+        ->contributor_safe_supply_by_organization,
+
+'reason_codes' =>
+    $observation
+        ->reason_codes,
 
             'evaluated_at' =>
                 $observation

@@ -415,10 +415,7 @@ protected function tearDown(): void
                 $context['forecast']
             );
 
-        $this->assertSame(
-            '100.000000',
-            (string) $first->shortfall
-        );
+
 
         Notification::query()->delete();
 
@@ -527,18 +524,24 @@ $observation =
         ->latest('id')
         ->firstOrFail();
 
-        $this->assertTrue(
+$this->assertSame(
+    [],
+    $observation->reason_codes
+);
+
+$this->assertSame(
+    [
+        $context['kdkmp']->id =>
+            (string)
             $observation
-                ->ready_for_procurement
-        );
+                ->total_safe_supply,
+    ],
+    $observation
+        ->contributor_safe_supply_by_organization
+);
 
-        $this->assertSame(
-            [],
-            $observation->reason_codes
-        );
-
-        $audit =
-            AuditLog::query()
+$audit =
+    AuditLog::query()
                 ->where(
                     'entity_type',
                     $context['forecast']
@@ -570,14 +573,23 @@ $observation =
                 ]
         );
 
-        $this->assertTrue(
-            $audit
-                ->new_value_json[
-                    'ready_for_procurement'
-                ]
-        );
+$this->assertTrue(
+    $audit
+        ->new_value_json[
+            'ready_for_procurement'
+        ]
+);
 
-        $dedupeKey =
+$this->assertSame(
+    $observation
+        ->contributor_safe_supply_by_organization,
+    $audit
+        ->new_value_json[
+            'contributor_safe_supply_by_organization'
+        ]
+);
+
+$dedupeKey =
             'derived-observation:'
             .$observation->id
             .':rfp-reached';

@@ -15,6 +15,7 @@ use LogicException;
     'shortfall',
     'ready_for_procurement',
     'contributor_organization_ids',
+    'contributor_safe_supply_by_organization',
     'reason_codes',
     'evaluated_at',
     'created_at',
@@ -43,6 +44,9 @@ class ForecastDerivedStateObservation extends Model
 
             'contributor_organization_ids' =>
                 'array',
+            
+            'contributor_safe_supply_by_organization' =>
+    'array',
 
             'reason_codes' =>
                 'array',
