@@ -501,165 +501,268 @@ class ReadinessHttpContractTest extends TestCase
             ->assertForbidden();
     }
 
-    public function test_sppg_readiness_view_exposes_only_aggregate_contributor_data(): void
-    {
-        $context =
-            $this->createOperationalContext(
-                'SPPG-PRIVACY'
-            );
-
-        $this->createApprovedLogisticsChecklist(
-            $context,
-            'LOG-SPPG-PRIVACY'
+    public function test_sppg_readiness_view_exposes_derived_procurement_status_and_only_aggregate_contributor_data(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'SPPG-PRIVACY'
         );
 
-        $documentContext =
-            $this->createApprovedDocumentChecklist(
-                $context,
-                'DOC-SPPG-PRIVACY'
+    $this->createApprovedLogisticsChecklist(
+        $context,
+        'LOG-SPPG-PRIVACY'
+    );
+
+    $documentContext =
+        $this->createApprovedDocumentChecklist(
+            $context,
+            'DOC-SPPG-PRIVACY'
+        );
+
+    /*
+     * Fixture:
+     *
+     * Demand       = 300
+     * Safe Supply  = 300
+     * Contributor  = current PRIMARY
+     * Logistics    = READY
+     * Document     = READY
+     *
+     * Karena itu derived M09 result harus TRUE.
+     */
+    $response =
+        $this->actingAs(
+            $context['sppgUser']
+        )
+            ->get(
+                '/sppg/forecasts/'
+                .$context['forecast']->id
+                .'/readiness'
             );
 
-        $response =
-            $this->actingAs(
-                $context['sppgUser']
-            )
-                ->get(
-                    '/sppg/forecasts/'
-                    .$context['forecast']->id
-                    .'/readiness'
-                );
+    $response
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Sppg/Forecasts/Readiness'
+                    )
+                    ->where(
+                        'forecast.id',
+                        $context['forecast']->id
+                    )
+                    ->where(
+                        'forecast.target_volume',
+                        '300.000000'
+                    )
+                    ->where(
+                        'supply.total_safe_supply',
+                        '300.000000'
+                    )
+                    ->where(
+                        'supply.shortfall',
+                        '0.000000'
+                    )
+                    ->where(
+                        'supply.volume_ready',
+                        true
+                    )
+                    ->where(
+                        'procurement.forecast_published',
+                        true
+                    )
+                    ->where(
+                        'procurement.operationally_valid',
+                        true
+                    )
+                    ->where(
+                        'procurement.volume_ready',
+                        true
+                    )
+                    ->where(
+                        'procurement.all_contributors_logistics_ready',
+                        true
+                    )
+                    ->where(
+                        'procurement.all_contributors_document_ready',
+                        true
+                    )
+                    ->where(
+                        'procurement.ready_for_procurement',
+                        true
+                    )
+                    ->where(
+                        'procurement.reason_codes',
+                        []
+                    )
+                    ->has(
+                        'procurement.evaluated_at'
+                    )
+                    ->has(
+                        'contributors',
+                        1
+                    )
+                    ->where(
+                        'contributors.0.organization.id',
+                        $context['kdkmp']->id
+                    )
+                    ->where(
+                        'contributors.0.logistics_ready',
+                        true
+                    )
+                    ->where(
+                        'contributors.0.document_ready',
+                        true
+                    )
+        );
 
+    $props =
         $response
-            ->assertOk()
-            ->assertInertia(
-                fn (
-                    Assert $page
-                ) =>
-                    $page
-                        ->component(
-    'Sppg/Forecasts/Readiness'
-)
-                        ->where(
-                            'forecast.id',
-                            $context['forecast']->id
-                        )
-                        ->where(
-                            'supply.volume_ready',
-                            true
-                        )
-                        ->has(
-                            'contributors',
-                            1
-                        )
-                        ->where(
-                            'contributors.0.organization.id',
-                            $context['kdkmp']->id
-                        )
-                        ->where(
-                            'contributors.0.logistics_ready',
-                            true
-                        )
-                        ->where(
-                            'contributors.0.document_ready',
-                            true
-                        )
-            );
+            ->viewData(
+                'page'
+            )['props'] ?? [];
 
-        $props =
-            $response
-                ->viewData(
-                    'page'
-                )['props'] ?? [];
+    $this->assertIsArray(
+        $props
+    );
 
-        $this->assertIsArray(
+    /*
+     * Procurement payload adalah aggregate derived
+     * status. Tidak membawa internal KDKMP evidence.
+     */
+    $procurement =
+        $props['procurement'] ?? null;
+
+    $this->assertIsArray(
+        $procurement
+    );
+
+    $this->assertSame(
+        [
+            'evaluated_at',
+            'forecast_published',
+            'operationally_valid',
+            'volume_ready',
+            'all_contributors_logistics_ready',
+            'all_contributors_document_ready',
+            'ready_for_procurement',
+            'reason_codes',
+        ],
+        array_keys(
+            $procurement
+        )
+    );
+
+    $this->assertTrue(
+        $procurement[
+            'ready_for_procurement'
+        ]
+    );
+
+    $contributors =
+        $props[
+            'contributors'
+        ] ?? null;
+
+    $this->assertIsArray(
+        $contributors
+    );
+
+    $this->assertCount(
+        1,
+        $contributors
+    );
+
+    /*
+     * Exact allowed contributor payload.
+     *
+     * Tidak ada producer, commitment,
+     * checklist item, document metadata,
+     * reserve ledger, atau source IDs.
+     */
+    $this->assertSame(
+        [
+            'organization',
+            'logistics_ready',
+            'document_ready',
+            'logistics_reason_codes',
+            'document_reason_codes',
+        ],
+        array_keys(
+            $contributors[0]
+        )
+    );
+
+    $this->assertSame(
+        [
+            'id',
+            'code',
+            'name',
+        ],
+        array_keys(
+            $contributors[0][
+                'organization'
+            ]
+        )
+    );
+
+    $serialized =
+        json_encode(
             $props
         );
 
-        $contributors =
-            $props[
-                'contributors'
-            ] ?? null;
+    $this->assertIsString(
+        $serialized
+    );
 
-        $this->assertIsArray(
-            $contributors
-        );
+    /*
+     * SPPG tetap tidak boleh memperoleh internal
+     * producer / document / readiness evidence
+     * walaupun sekarang halaman juga mengekspos
+     * M09 derived status.
+     */
+    $this->assertStringNotContainsString(
+        $context['producer']->name,
+        $serialized
+    );
 
-        $this->assertCount(
-            1,
-            $contributors
-        );
+    $this->assertStringNotContainsString(
+        $documentContext[
+            'document'
+        ]->reference_number,
+        $serialized
+    );
 
-        /*
-         * Exact allowed contributor payload.
-         *
-         * Tidak ada producer, commitment,
-         * checklist item, document metadata,
-         * reserve ledger, atau source IDs.
-         */
-        $this->assertSame(
-            [
-                'organization',
-                'logistics_ready',
-                'document_ready',
-                'logistics_reason_codes',
-                'document_reason_codes',
-            ],
-            array_keys(
-                $contributors[0]
-            )
-        );
+    $this->assertStringNotContainsString(
+        $documentContext[
+            'document'
+        ]->document_name,
+        $serialized
+    );
 
-        $this->assertSame(
-            [
-                'id',
-                'code',
-                'name',
-            ],
-            array_keys(
-                $contributors[0][
-                    'organization'
-                ]
-            )
-        );
+    $this->assertStringNotContainsString(
+        'document_record_revision_no',
+        $serialized
+    );
 
-        $serialized =
-            json_encode(
-                $props
-            );
+    $this->assertStringNotContainsString(
+        'readiness_checklist_id',
+        $serialized
+    );
 
-        $this->assertIsString(
-            $serialized
-        );
+    $this->assertStringNotContainsString(
+        'producer_id',
+        $serialized
+    );
 
-        $this->assertStringNotContainsString(
-            $context['producer']->name,
-            $serialized
-        );
-
-        $this->assertStringNotContainsString(
-            $documentContext[
-                'document'
-            ]->reference_number,
-            $serialized
-        );
-
-        $this->assertStringNotContainsString(
-            $documentContext[
-                'document'
-            ]->document_name,
-            $serialized
-        );
-
-        $this->assertStringNotContainsString(
-            'document_record_revision_no',
-            $serialized
-        );
-
-        $this->assertStringNotContainsString(
-            'readiness_checklist_id',
-            $serialized
-        );
-    }
+    $this->assertStringNotContainsString(
+        'supply_commitment_id',
+        $serialized
+    );
+}
 
     public function test_sppg_cannot_open_private_kdkmp_readiness_workspace_by_direct_url(): void
     {
