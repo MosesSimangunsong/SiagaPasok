@@ -10,10 +10,14 @@ import {
     ArrowLeft,
     Building2,
     CalendarDays,
+    CheckCircle2,
+    CircleMinus,
     Clock3,
+    FileCheck2,
     Handshake,
     MapPin,
     Send,
+    Truck,
 } from "lucide-react";
 import KdkmpLayout from "@/Layouts/KdkmpLayout";
 import { Head, router } from "@inertiajs/react";
@@ -26,7 +30,11 @@ import {
     Send,
 } from "lucide-react";
 
-export default function Show({ forecast, canCreateCommitment }) {
+export default function Show({
+    forecast,
+    canCreateCommitment,
+    readinessContext,
+}) {
     return (
         <>
             <Head title={`${forecast.forecast_code} — SiagaPasok`} />
@@ -84,6 +92,10 @@ export default function Show({ forecast, canCreateCommitment }) {
                             }
                         />
                     </div>
+                    <ReadinessOverview
+    forecast={forecast}
+    context={readinessContext}
+/>
 
                     <Card>
                         <CardHeader className="border-b">
@@ -232,6 +244,309 @@ export default function Show({ forecast, canCreateCommitment }) {
             </KdkmpLayout>
         </>
     );
+}
+
+function ReadinessOverview({
+    forecast,
+    context,
+}) {
+    if (!context) {
+        return null;
+    }
+
+    return (
+        <Card>
+            <CardHeader className="border-b">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <CardTitle>
+                            Readiness Contributor
+                        </CardTitle>
+
+                        <CardDescription>
+                            Logistics dan Document
+                            Readiness hanya berlaku
+                            ketika KDKMP menjadi
+                            contributor efektif pada
+                            current Safe Supply.
+                        </CardDescription>
+                    </div>
+
+                    <ContributorBadge
+                        value={
+                            context.is_contributor
+                        }
+                    />
+                </div>
+            </CardHeader>
+
+            <CardContent className="space-y-4">
+                {!context.is_contributor && (
+                    <div className="rounded-xl border border-border bg-muted/30 p-4">
+                        <div className="flex items-start gap-3">
+                            <CircleMinus className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+
+                            <div>
+                                <p className="font-medium text-foreground">
+                                    Readiness belum
+                                    berlaku
+                                </p>
+
+                                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                                    KDKMP ini belum
+                                    termasuk contributor
+                                    efektif pada current
+                                    Safe Supply Forecast.
+                                    Status akan berubah
+                                    otomatis ketika
+                                    kontribusi pasokan
+                                    menjadi efektif.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                    <ReadinessEntry
+                        forecast={forecast}
+                        type="logistics"
+                        label="Logistics Readiness"
+                        description="Kesiapan operasional pengiriman dan requirement logistik."
+                        icon={Truck}
+                        data={
+                            context.logistics
+                        }
+                        applicable={
+                            context.is_contributor
+                        }
+                    />
+
+                    <ReadinessEntry
+                        forecast={forecast}
+                        type="document"
+                        label="Document Readiness"
+                        description="Kelengkapan dan validitas evidence dokumen yang dipersyaratkan."
+                        icon={FileCheck2}
+                        data={
+                            context.document
+                        }
+                        applicable={
+                            context.is_contributor
+                        }
+                    />
+                </div>
+            </CardContent>
+        </Card>
+    );
+}
+
+function ReadinessEntry({
+    forecast,
+    type,
+    label,
+    description,
+    icon: Icon,
+    data,
+    applicable,
+}) {
+    const prepare = () => {
+        router.post(
+            `/kdkmp/forecasts/${forecast.id}/readiness/${type}/prepare`,
+            {},
+            {
+                preserveScroll: true,
+            },
+        );
+    };
+
+    return (
+        <div className="rounded-xl border border-border p-4">
+            <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Icon className="size-4" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium text-foreground">
+                            {label}
+                        </p>
+
+                        <ReadinessTruthBadge
+                            ready={
+                                data?.ready
+                            }
+                            applicable={
+                                applicable
+                            }
+                        />
+                    </div>
+
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                        {description}
+                    </p>
+
+                    {data?.status && (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                            Checklist Version{" "}
+                            {data.version_no}
+                            {" • "}
+                            {approvalLabel(
+                                data.status,
+                            )}
+                        </p>
+                    )}
+
+                    {applicable &&
+                        !data?.ready &&
+                        data?.reason_codes
+                            ?.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                {data.reason_codes.map(
+                                    (reason) => (
+                                        <span
+                                            key={
+                                                reason
+                                            }
+                                            className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                        >
+                                            {readinessReasonLabel(
+                                                reason,
+                                            )}
+                                        </span>
+                                    ),
+                                )}
+                            </div>
+                        )}
+
+                    {(data?.can_prepare ||
+                        data?.can_open) && (
+                        <div className="mt-4">
+                            {data.can_prepare && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={
+                                        prepare
+                                    }
+                                >
+                                    <FileCheck2 data-icon="inline-start" />
+                                    Siapkan{" "}
+                                    {type ===
+                                    "logistics"
+                                        ? "Logistics"
+                                        : "Document"}
+                                </Button>
+                            )}
+
+                            {data.can_open && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() =>
+                                        router.visit(
+                                            `/kdkmp/readiness/${data.checklist_id}`,
+                                        )
+                                    }
+                                >
+                                    <FileCheck2 data-icon="inline-start" />
+                                    Buka Readiness
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ContributorBadge({ value }) {
+    return (
+        <span
+            className={[
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                value
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground",
+            ].join(" ")}
+        >
+            {value ? (
+                <CheckCircle2 className="size-3.5" />
+            ) : (
+                <CircleMinus className="size-3.5" />
+            )}
+
+            {value
+                ? "Contributor Aktif"
+                : "Bukan Contributor"}
+        </span>
+    );
+}
+
+function ReadinessTruthBadge({
+    ready,
+    applicable,
+}) {
+    if (!applicable) {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                <CircleMinus className="size-3.5" />
+                Tidak Berlaku
+            </span>
+        );
+    }
+
+    if (ready) {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+                <CheckCircle2 className="size-3.5" />
+                Ready
+            </span>
+        );
+    }
+
+    return (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            <Clock3 className="size-3.5" />
+            Belum Ready
+        </span>
+    );
+}
+
+function approvalLabel(value) {
+    return (
+        {
+            DRAFT: "Draft",
+            PENDING_APPROVAL:
+                "Menunggu Persetujuan",
+            APPROVED: "Disetujui",
+            REJECTED: "Ditolak",
+        }[value] ?? value
+    );
+}
+
+function readinessReasonLabel(code) {
+    const labels = {
+        NOT_CURRENT_CONTRIBUTOR:
+            "Bukan contributor aktif",
+        CHECKLIST_MISSING:
+            "Checklist belum disiapkan",
+        CHECKLIST_NOT_APPROVED:
+            "Belum disetujui Manager",
+        FORECAST_VERSION_STALE:
+            "Forecast telah direvisi",
+        REQUIRED_ITEM_UNSATISFIED:
+            "Requirement wajib belum terpenuhi",
+        DOCUMENT_INVALID:
+            "Dokumen tidak valid",
+        FORECAST_WINDOW_ENDED:
+            "Periode Forecast berakhir",
+    };
+
+    return labels[code] ?? code;
 }
 
 function SummaryCard({ label, value }) {
