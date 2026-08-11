@@ -18,8 +18,10 @@ import {
     Pencil,
     Send,
     XCircle,
+    FileCheck2,
 } from "lucide-react";
 import { useState } from "react";
+
 
 const inputClassName =
     "h-10 w-full rounded-lg border border-border bg-background px-3 text-sm text-foreground outline-none transition focus:border-primary focus:ring-3 focus:ring-primary/15";
@@ -142,20 +144,38 @@ export default function Show({ forecast }) {
                 pageTitle={forecast.forecast_code}
                 pageDescription={`${forecast.commodity.name} • Version ${forecast.version}`}
                 headerActions={
-                    <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                            router.visit(
-                                "/sppg/forecasts",
-                            )
-                        }
-                    >
-                        <ArrowLeft data-icon="inline-start" />
-                        Daftar Forecast
-                    </Button>
+    <>
+        {forecast.status ===
+            "PUBLISHED" && (
+            <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                    router.visit(
+                        `/sppg/forecasts/${forecast.id}/readiness`,
+                    )
                 }
+            >
+                <FileCheck2 data-icon="inline-start" />
+                Lihat Readiness
+            </Button>
+        )}
+
+        <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+                router.visit(
+                    "/sppg/forecasts",
+                )
+            }
+        >
+            <ArrowLeft data-icon="inline-start" />
+            Daftar Forecast
+        </Button>
+    </>
+}
             >
                 <div className="space-y-6">
                     <div className="grid gap-4 md:grid-cols-3">
