@@ -34,6 +34,7 @@ use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
 use App\Http\Controllers\Sppg\ForecastReadinessController;
+use App\Http\Controllers\NotificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -61,6 +62,36 @@ Route::middleware([
         '/logout',
         [AuthenticatedSessionController::class, 'destroy']
     )->name('logout');
+
+    /*
+|--------------------------------------------------------------------------
+| Shared — Notification Center
+|--------------------------------------------------------------------------
+|
+| Notification adalah recipient-scoped action signal.
+| Semua query dan mutation ownership ditegakkan server-side.
+|
+*/
+
+Route::get(
+    '/notifications',
+    [
+        NotificationController::class,
+        'index',
+    ]
+)->name(
+    'notifications.index'
+);
+
+Route::patch(
+    '/notifications/{notification}/read',
+    [
+        NotificationController::class,
+        'markRead',
+    ]
+)->name(
+    'notifications.read'
+);
 
     /*
     |--------------------------------------------------------------------------

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use App\Models\Notification;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -29,6 +30,19 @@ class HandleInertiaRequests extends Middleware
         if ($user) {
             $user->loadMissing('organization');
         }
+
+        $unreadNotificationCount =
+    $user === null
+        ? 0
+        : Notification::query()
+            ->where(
+                'recipient_user_id',
+                $user->id
+            )
+            ->whereNull(
+                'read_at'
+            )
+            ->count();
 
         return [
             ...parent::share($request),
@@ -61,6 +75,18 @@ class HandleInertiaRequests extends Middleware
                     ]
                     : null,
             ],
+
+            'notification_center' => [
+    'unread_count' =>
+        $unreadNotificationCount,
+
+    'href' =>
+        $user
+            ? route(
+                'notifications.index'
+            )
+            : null,
+],
 
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

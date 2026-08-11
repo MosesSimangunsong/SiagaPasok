@@ -1,5 +1,5 @@
-import { Link } from "@inertiajs/react";
-import { Menu } from "lucide-react";
+import { Link, usePage } from "@inertiajs/react";
+import { Bell, Menu } from "lucide-react";
 
 function SidebarNavigationItem({ item }) {
     const Icon = item.icon;
@@ -45,6 +45,20 @@ export default function AppShell({
     workspaceLabel,
     user,
 }) {
+    const page = usePage();
+
+    const notificationCenter = page.props?.notification_center ?? {};
+
+    const unreadNotificationCount = Number(
+        notificationCenter.unread_count ?? 0,
+    );
+
+    const notificationHref = notificationCenter.href ?? "/notifications";
+
+    const notificationCountLabel =
+        unreadNotificationCount > 99 ? "99+" : String(unreadNotificationCount);
+
+    const notificationActive = page.url.startsWith("/notifications");
     return (
         <div className="min-h-screen bg-background">
             <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col bg-sidebar text-sidebar-foreground lg:flex">
@@ -162,11 +176,33 @@ export default function AppShell({
                         </div>
                     </div>
 
-                    {headerActions && (
-                        <div className="ml-4 flex shrink-0 items-center gap-2">
-                            {headerActions}
-                        </div>
-                    )}
+                    <div className="ml-4 flex shrink-0 items-center gap-2">
+                        <Link
+                            href={notificationHref}
+                            className={[
+                                "relative flex size-9 items-center justify-center rounded-lg border transition-colors",
+                                notificationActive
+                                    ? "border-primary/30 bg-primary/10 text-primary"
+                                    : "border-border bg-card text-muted-foreground hover:bg-muted hover:text-foreground",
+                            ].join(" ")}
+                            aria-label={
+                                unreadNotificationCount > 0
+                                    ? `${unreadNotificationCount} notifikasi belum dibaca`
+                                    : "Buka notifikasi"
+                            }
+                            title="Notifikasi"
+                        >
+                            <Bell className="size-4" />
+
+                            {unreadNotificationCount > 0 && (
+                                <span className="absolute -right-1.5 -top-1.5 flex min-w-5 items-center justify-center rounded-full bg-destructive px-1.5 text-[10px] font-semibold leading-5 text-destructive-foreground">
+                                    {notificationCountLabel}
+                                </span>
+                            )}
+                        </Link>
+
+                        {headerActions}
+                    </div>
                 </header>
 
                 <main className="p-6">{children}</main>
