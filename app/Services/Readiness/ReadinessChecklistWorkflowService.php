@@ -13,6 +13,7 @@ use App\Models\ReadinessItem;
 use App\Models\User;
 use App\Services\Audit\AuditService;
 use App\Services\Supply\SupplyMetricsService;
+use App\Services\Notification\OperationalNotificationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -28,16 +29,19 @@ final class ReadinessChecklistWorkflowService
         'READINESS_SUBMITTED';
 
     public function __construct(
-        private readonly SupplyMetricsService
-            $supplyMetricsService,
+    private readonly SupplyMetricsService
+        $supplyMetricsService,
 
-        private readonly DocumentRecordValidityService
-            $documentRecordValidityService,
+    private readonly DocumentRecordValidityService
+        $documentRecordValidityService,
 
-        private readonly AuditService
-            $auditService,
-    ) {
-    }
+    private readonly AuditService
+        $auditService,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
+) {
+}
 
     public function updateItem(
         User $actor,
@@ -606,23 +610,28 @@ $item->save();
                 ]);
 
                 $this->auditService->record(
-                    actor: $actor,
-                    source: AuditSource::USER,
-                    action: self::AUDIT_SUBMITTED,
-                    entity: $currentChecklist,
-                    previousValue: $before,
-                    newValue:
-                        $this->snapshotChecklist(
-                            $currentChecklist,
-                            $items
-                        ),
-                );
+    actor: $actor,
+    source: AuditSource::USER,
+    action: self::AUDIT_SUBMITTED,
+    entity: $currentChecklist,
+    previousValue: $before,
+    newValue:
+        $this->snapshotChecklist(
+            $currentChecklist,
+            $items
+        ),
+);
 
-                return $currentChecklist
-                    ->refresh()
-                    ->load([
-                        'items.requirement',
-                    ]);
+$this->operationalNotificationService
+    ->readinessApprovalRequired(
+        $currentChecklist
+    );
+
+return $currentChecklist
+    ->refresh()
+    ->load([
+        'items.requirement',
+    ]);
             }
         );
     }

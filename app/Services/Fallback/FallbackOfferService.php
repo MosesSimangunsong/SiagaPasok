@@ -14,6 +14,7 @@ use App\Models\SupplyCommitment;
 use App\Models\SupplyNetworkLink;
 use App\Models\User;
 use App\Services\Audit\AuditService;
+use App\Services\Notification\OperationalNotificationService;
 use App\Support\FixedScaleDecimal;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -62,10 +63,20 @@ private const AUDIT_ACCEPTED =
 private const AUDIT_REQUEST_FULFILLED =
     'FALLBACK_REQUEST_FULFILLED';
     public function __construct(
-    private readonly AuditService $auditService,
-    private readonly FallbackCapacityService $capacityService,
-    private readonly FallbackRequestService $requestService,
-    private readonly FallbackReservationService $reservationService,
+    private readonly AuditService
+        $auditService,
+
+    private readonly FallbackCapacityService
+        $capacityService,
+
+    private readonly FallbackRequestService
+        $requestService,
+
+    private readonly FallbackReservationService
+        $reservationService,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
 ) {
 }
 
@@ -855,19 +866,32 @@ public function approveForAvailability(
 );
 
             $this->auditService->record(
-                actor: $actor,
-                source: AuditSource::USER,
-                action:
-                    self::AUDIT_AVAILABLE,
-                entity: $currentOffer,
-                previousValue: $before,
-                newValue:
-                    $this->snapshot(
-                        $currentOffer
-                    ),
-            );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_AVAILABLE,
+    entity: $currentOffer,
+    previousValue: $before,
+    newValue:
+        $this->snapshot(
+            $currentOffer
+        ),
+);
 
-            return $currentOffer;
+/*
+ * Requester Manager baru boleh diberi CTA setelah:
+ *
+ * - source masih eligible;
+ * - reserve penuh berhasil;
+ * - Offer benar-benar AVAILABLE.
+ */
+$this->operationalNotificationService
+    ->fallbackOfferDecisionRequired(
+        $currentOffer,
+        $request
+    );
+
+return $currentOffer;
         }
     );
 }

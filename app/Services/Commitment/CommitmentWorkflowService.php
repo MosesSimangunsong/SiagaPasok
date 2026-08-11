@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Models\FallbackRequest;
 use Illuminate\Support\Carbon;
 use App\Services\Audit\AuditService;
+use App\Services\Notification\OperationalNotificationService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -53,8 +54,14 @@ class CommitmentWorkflowService
     'FALLBACK_SOURCE_COMMITMENT_CREATED';
 
     public function __construct(
-    private readonly AuditService $auditService,
-    private readonly CommitmentEligibilityService $commitmentEligibility,
+    private readonly AuditService
+        $auditService,
+
+    private readonly CommitmentEligibilityService
+        $commitmentEligibility,
+
+    private readonly OperationalNotificationService
+        $operationalNotificationService,
 ) {
 }
 
@@ -723,20 +730,33 @@ class CommitmentWorkflowService
                 ]);
 
                 $this->auditService->record(
-                    actor: $actor,
-                    source: AuditSource::USER,
-                    action:
-                        self::AUDIT_SUBMITTED,
-                    entity: $currentVersion,
-                    previousValue: $before,
-                    newValue:
-                        $this->versionSnapshot(
-                            $currentVersion
-                        ),
-                );
+    actor: $actor,
+    source: AuditSource::USER,
+    action:
+        self::AUDIT_SUBMITTED,
+    entity: $currentVersion,
+    previousValue: $before,
+    newValue:
+        $this->versionSnapshot(
+            $currentVersion
+        ),
+);
 
-                return $currentVersion
-                    ->refresh();
+/*
+ * NotificationService akan menunda persistence
+ * sampai outer business transaction commit.
+ *
+ * Jika transaction rollback, notification tidak
+ * menjadi visible.
+ */
+$this->operationalNotificationService
+    ->commitmentApprovalRequired(
+        $commitment,
+        $currentVersion
+    );
+
+return $currentVersion
+    ->refresh();
             }
         );
     }
