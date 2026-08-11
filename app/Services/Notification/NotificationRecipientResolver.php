@@ -41,6 +41,98 @@ final class NotificationRecipientResolver
         );
     }
 
+
+    /**
+ * @return Collection<int, User>
+ */
+public function primaryKdkmpOperatorsAndManagers(
+    DemandForecast $forecast,
+): Collection {
+    $primaryOrganizationIds =
+        SupplyNetworkLink::query()
+            ->where(
+                'sppg_organization_id',
+                $forecast
+                    ->sppg_organization_id
+            )
+            ->where(
+                'network_role',
+                NetworkRole::PRIMARY->value
+            )
+            ->where(
+                'is_active',
+                true
+            )
+            ->orderBy('id')
+            ->pluck(
+                'kdkmp_organization_id'
+            );
+
+    /*
+     * Corrupted topology tidak boleh
+     * menghasilkan arbitrary notification.
+     */
+    if (
+        $primaryOrganizationIds->count()
+        !== 1
+    ) {
+        return collect();
+    }
+
+    return $this
+        ->kdkmpOperatorsAndManagers(
+            (int)
+            $primaryOrganizationIds
+                ->first()
+        );
+}
+
+/**
+ * @param array<int, int> $organizationIds
+ *
+ * @return Collection<int, User>
+ */
+public function kdkmpManagersForOrganizations(
+    array $organizationIds,
+): Collection {
+    $ids =
+        collect(
+            $organizationIds
+        )
+            ->map(
+                static fn ($id): int =>
+                    (int) $id
+            )
+            ->unique()
+            ->sort()
+            ->values();
+
+    if ($ids->isEmpty()) {
+        return collect();
+    }
+
+    return User::query()
+        ->whereIn(
+            'organization_id',
+            $ids->all()
+        )
+        ->where(
+            'role',
+            UserRole::KDKMP_MANAGER
+                ->value
+        )
+        ->where(
+            'is_active',
+            true
+        )
+        ->orderBy(
+            'organization_id'
+        )
+        ->orderBy('id')
+        ->get();
+}
+
+
     /**
      * @return Collection<int, User>
      */

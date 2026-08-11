@@ -14,6 +14,7 @@ use App\Models\FallbackRequest;
 use App\Models\ReadinessChecklist;
 use App\Models\DemandForecast;
 use App\Models\CommitmentConfidenceEvent;
+use App\Models\ForecastDerivedStateObservation;
 
 final class OperationalNotificationService
 {
@@ -78,6 +79,229 @@ final class OperationalNotificationService
     }
 
 
+
+    public function shortfallIncreased(
+    DemandForecast $forecast,
+    ForecastDerivedStateObservation $observation,
+): void {
+    $recipients =
+        $this->recipientResolver
+            ->primaryKdkmpOperatorsAndManagers(
+                $forecast
+            );
+
+    foreach ($recipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::SHORTFALL,
+
+                priority:
+                    NotificationPriority::WARNING,
+
+                title:
+                    'Shortfall pasokan meningkat',
+
+                message:
+                    'Shortfall Forecast muncul atau '
+                    .'bertambah. Evaluasi kebutuhan '
+                    .'fallback dan kondisi Safe Supply.',
+
+                relatedEntity:
+                    $forecast,
+
+                actionUrl:
+                    '/kdkmp/forecasts/'
+                    .$forecast->id,
+
+                deduplicationKey:
+                    'derived-observation:'
+                    .$observation->id
+                    .':shortfall',
+            );
+    }
+}
+
+public function readyForProcurementReached(
+    DemandForecast $forecast,
+    ForecastDerivedStateObservation $observation,
+): void {
+    $sppgRecipients =
+        $this->recipientResolver
+            ->sppgUsers(
+                $forecast
+                    ->sppg_organization_id
+            );
+
+    foreach ($sppgRecipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::RFP,
+
+                priority:
+                    NotificationPriority
+                        ::INFORMATION,
+
+                title:
+                    'Ready for Procurement tercapai',
+
+                message:
+                    'Forecast telah memenuhi volume, '
+                    .'Logistics Readiness, dan '
+                    .'Document Readiness seluruh '
+                    .'effective contributor.',
+
+                relatedEntity:
+                    $forecast,
+
+                actionUrl:
+                    '/sppg/forecasts/'
+                    .$forecast->id,
+
+                deduplicationKey:
+                    'derived-observation:'
+                    .$observation->id
+                    .':rfp-reached',
+            );
+    }
+
+    $managerRecipients =
+        $this->recipientResolver
+            ->kdkmpManagersForOrganizations(
+                $observation
+                    ->contributor_organization_ids
+            );
+
+    foreach ($managerRecipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::RFP,
+
+                priority:
+                    NotificationPriority
+                        ::INFORMATION,
+
+                title:
+                    'Ready for Procurement tercapai',
+
+                message:
+                    'Forecast yang Anda kontribusikan '
+                    .'telah memenuhi seluruh gate '
+                    .'Ready for Procurement.',
+
+                relatedEntity:
+                    $forecast,
+
+                actionUrl:
+                    '/kdkmp/forecasts/'
+                    .$forecast->id,
+
+                deduplicationKey:
+                    'derived-observation:'
+                    .$observation->id
+                    .':rfp-reached',
+            );
+    }
+}
+
+public function readyForProcurementLost(
+    DemandForecast $forecast,
+    ForecastDerivedStateObservation $observation,
+    array $affectedContributorOrganizationIds,
+): void {
+    $sppgRecipients =
+        $this->recipientResolver
+            ->sppgUsers(
+                $forecast
+                    ->sppg_organization_id
+            );
+
+    foreach ($sppgRecipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::RFP,
+
+                priority:
+                    NotificationPriority::WARNING,
+
+                title:
+                    'Ready for Procurement tidak lagi terpenuhi',
+
+                message:
+                    'Salah satu dependency Forecast '
+                    .'berubah. Lihat status terbaru '
+                    .'untuk mengetahui blocker.',
+
+                relatedEntity:
+                    $forecast,
+
+                actionUrl:
+                    '/sppg/forecasts/'
+                    .$forecast->id,
+
+                deduplicationKey:
+                    'derived-observation:'
+                    .$observation->id
+                    .':rfp-lost',
+            );
+    }
+
+    $managerRecipients =
+        $this->recipientResolver
+            ->kdkmpManagersForOrganizations(
+                $affectedContributorOrganizationIds
+            );
+
+    foreach ($managerRecipients as $recipient) {
+        $this->notificationService
+            ->send(
+                recipient:
+                    $recipient,
+
+                type:
+                    NotificationType::RFP,
+
+                priority:
+                    NotificationPriority::WARNING,
+
+                title:
+                    'Ready for Procurement hilang',
+
+                message:
+                    'Forecast tidak lagi memenuhi '
+                    .'seluruh dependency Ready for '
+                    .'Procurement. Tinjau supply dan '
+                    .'readiness terkait.',
+
+                relatedEntity:
+                    $forecast,
+
+                actionUrl:
+                    '/kdkmp/forecasts/'
+                    .$forecast->id,
+
+                deduplicationKey:
+                    'derived-observation:'
+                    .$observation->id
+                    .':rfp-lost',
+            );
+    }
+}
 public function supplyConfidenceDowngraded(
     SupplyCommitment $commitment,
     CommitmentConfidenceEvent $event,
