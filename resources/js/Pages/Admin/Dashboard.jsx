@@ -78,6 +78,89 @@ export default function Dashboard({ stats }) {
                         })}
                     </div>
 
+                    <Card>
+    <CardHeader className="border-b">
+        <CardTitle>
+            Status Administratif
+        </CardTitle>
+
+        <CardDescription>
+            Item nonaktif yang dapat ditinjau
+            melalui area administrasi masing-masing.
+        </CardDescription>
+    </CardHeader>
+
+    <CardContent className="p-0">
+        <div className="grid md:grid-cols-2">
+            <button
+                type="button"
+                onClick={() =>
+                    router.visit(
+                        "/admin/organizations",
+                    )
+                }
+                className="flex items-center justify-between gap-4 border-b border-border px-5 py-4 text-left transition hover:bg-muted/40 md:border-b-0 md:border-r"
+            >
+                <div>
+                    <p className="text-sm font-medium text-foreground">
+                        Organisasi Nonaktif
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Tinjau status organisasi
+                        pada registry platform.
+                    </p>
+                </div>
+
+                <span
+                    className={
+                        stats.inactive_organizations >
+                        0
+                            ? "rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700"
+                            : "rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700"
+                    }
+                >
+                    {stats.inactive_organizations ??
+                        0}
+                </span>
+            </button>
+
+            <button
+                type="button"
+                onClick={() =>
+                    router.visit(
+                        "/admin/users",
+                    )
+                }
+                className="flex items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-muted/40"
+            >
+                <div>
+                    <p className="text-sm font-medium text-foreground">
+                        Akun Nonaktif
+                    </p>
+
+                    <p className="mt-1 text-xs text-muted-foreground">
+                        Tinjau role dan status akses
+                        pengguna.
+                    </p>
+                </div>
+
+                <span
+                    className={
+                        stats.inactive_users > 0
+                            ? "rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-700"
+                            : "rounded-full bg-emerald-50 px-3 py-1 text-sm font-semibold text-emerald-700"
+                    }
+                >
+                    {stats.inactive_users ??
+                        0}
+                </span>
+            </button>
+        </div>
+    </CardContent>
+</Card>
+
+
                     <div className="grid gap-6 lg:grid-cols-2">
                         <Card>
                             <CardHeader>

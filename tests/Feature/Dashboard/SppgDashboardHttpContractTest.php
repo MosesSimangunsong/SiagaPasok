@@ -12,6 +12,9 @@ use App\Models\Organization;
 use App\Models\SupplyNetworkLink;
 use App\Models\Unit;
 use App\Models\User;
+use App\Enums\NotificationPriority;
+use App\Enums\NotificationType;
+use App\Services\Notification\NotificationService;
 use App\Services\Forecast\DemandForecastService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -217,6 +220,107 @@ class SppgDashboardHttpContractTest extends TestCase
                 $otherForecast->version
             );
 
+            $notificationService =
+    app(
+        NotificationService::class
+    );
+
+/*
+ * RFP event milik SPPG A harus
+ * muncul pada dashboard user A.
+ */
+$notificationService->send(
+    recipient:
+        $user,
+
+    type:
+        NotificationType::RFP,
+
+    priority:
+        NotificationPriority
+            ::INFORMATION,
+
+    title:
+        'Ready for Procurement tercapai',
+
+    message:
+        'Forecast A memenuhi seluruh gate.',
+
+    relatedEntity:
+        $forecast,
+
+    actionUrl:
+        '/sppg/forecasts/'
+        .$forecast->id,
+
+    deduplicationKey:
+        'dashboard-sppg-a-rfp'
+);
+
+/*
+ * Notification non-RFP untuk recipient
+ * yang sama tidak termasuk Recent RFP.
+ */
+$notificationService->send(
+    recipient:
+        $user,
+
+    type:
+        NotificationType::SHORTFALL,
+
+    priority:
+        NotificationPriority
+            ::WARNING,
+
+    title:
+        'Shortfall meningkat',
+
+    message:
+        'Notification ini bukan RFP.',
+
+    relatedEntity:
+        $forecast,
+
+    actionUrl:
+        '/sppg/forecasts/'
+        .$forecast->id,
+
+    deduplicationKey:
+        'dashboard-sppg-a-shortfall'
+);
+
+/*
+ * RFP event tenant/recipient lain
+ * tidak boleh bocor ke user A.
+ */
+$notificationService->send(
+    recipient:
+        $otherUser,
+
+    type:
+        NotificationType::RFP,
+
+    priority:
+        NotificationPriority
+            ::WARNING,
+
+    title:
+        'RFP tenant lain hilang',
+
+    message:
+        'Tidak boleh tampil pada Dashboard A.',
+
+    relatedEntity:
+        $otherForecast,
+
+    actionUrl:
+        '/sppg/forecasts/'
+        .$otherForecast->id,
+
+    deduplicationKey:
+        'dashboard-sppg-b-rfp'
+);
+
         $this->assertSame(
             ForecastStatus::DRAFT,
             $draft->status
@@ -301,6 +405,30 @@ class SppgDashboardHttpContractTest extends TestCase
                             'forecasts.0.contributors',
                             0
                         )
+
+                        ->has(
+    'recentRfpTransitions',
+    1
+)
+->where(
+    'recentRfpTransitions.0.priority',
+    NotificationPriority
+        ::INFORMATION
+        ->value
+)
+->where(
+    'recentRfpTransitions.0.title',
+    'Ready for Procurement tercapai'
+)
+->where(
+    'recentRfpTransitions.0.message',
+    'Forecast A memenuhi seluruh gate.'
+)
+->where(
+    'recentRfpTransitions.0.action_url',
+    '/sppg/forecasts/'
+    .$forecast->id
+)
             );
 
         /*

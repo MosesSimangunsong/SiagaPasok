@@ -28,6 +28,7 @@ export default function Dashboard({
     organization,
     summary = {},
     forecasts = [],
+    recentRfpTransitions = [],
 }) {
     return (
         <>
@@ -68,6 +69,12 @@ export default function Dashboard({
                     <Forecasts
                         forecasts={forecasts}
                     />
+
+                    <RecentRfpTransitions
+    transitions={
+        recentRfpTransitions
+    }
+/>
 
                     <div className="rounded-xl border border-border bg-card px-4 py-3">
                         <p className="text-xs text-muted-foreground">
@@ -646,6 +653,161 @@ function RfpBlockers({ reasons }) {
         </div>
     );
 }
+
+
+function RecentRfpTransitions({
+    transitions,
+}) {
+    return (
+        <Card>
+            <CardHeader className="border-b">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                        <CardTitle>
+                            Perubahan Ready for
+                            Procurement Terbaru
+                        </CardTitle>
+
+                        <CardDescription className="mt-1">
+                            Riwayat notification
+                            terbaru ketika Forecast
+                            mencapai atau kehilangan
+                            status Ready for
+                            Procurement.
+                        </CardDescription>
+                    </div>
+
+                    <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                            router.visit(
+                                "/notifications",
+                            )
+                        }
+                    >
+                        Lihat Notifikasi
+                        <ArrowRight data-icon="inline-end" />
+                    </Button>
+                </div>
+            </CardHeader>
+
+            <CardContent className="p-0">
+                {transitions.length === 0 ? (
+                    <div className="flex min-h-40 flex-col items-center justify-center px-6 text-center">
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                            <CheckCircle2 className="size-5" />
+                        </div>
+
+                        <p className="mt-3 text-sm font-medium text-foreground">
+                            Belum ada perubahan RFP
+                        </p>
+
+                        <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">
+                            Event akan muncul ketika
+                            suatu Forecast mencapai
+                            atau kehilangan Ready for
+                            Procurement.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="divide-y divide-border">
+                        {transitions.map(
+                            (transition) => (
+                                <RfpTransitionRow
+                                    key={
+                                        transition.id
+                                    }
+                                    transition={
+                                        transition
+                                    }
+                                />
+                            ),
+                        )}
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function RfpTransitionRow({
+    transition,
+}) {
+    const warning =
+        transition.priority ===
+        "WARNING";
+
+    return (
+        <div className="flex flex-col gap-4 px-5 py-4 sm:flex-row sm:items-center">
+            <div
+                className={
+                    warning
+                        ? "flex size-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-700"
+                        : "flex size-10 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700"
+                }
+            >
+                {warning ? (
+                    <AlertTriangle className="size-5" />
+                ) : (
+                    <CheckCircle2 className="size-5" />
+                )}
+            </div>
+
+            <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium text-foreground">
+                        {
+                            transition.title
+                        }
+                    </p>
+
+                    <span
+                        className={
+                            warning
+                                ? "inline-flex rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700"
+                                : "inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700"
+                        }
+                    >
+                        {warning
+                            ? "Perlu Perhatian"
+                            : "Tercapai"}
+                    </span>
+                </div>
+
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                    {
+                        transition.message
+                    }
+                </p>
+
+                <p className="mt-2 text-xs text-muted-foreground">
+                    {formatDateTime(
+                        transition.created_at,
+                    )}
+                </p>
+            </div>
+
+            {transition.action_url && (
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                        router.visit(
+                            transition.action_url,
+                        )
+                    }
+                >
+                    Lihat Forecast
+                    <ArrowRight data-icon="inline-end" />
+                </Button>
+            )}
+        </div>
+    );
+}
+
 
 function ProcurementBadge({
     ready,

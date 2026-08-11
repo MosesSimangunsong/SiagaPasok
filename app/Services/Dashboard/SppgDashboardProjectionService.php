@@ -6,6 +6,8 @@ use App\Enums\ForecastStatus;
 use App\Models\DemandForecast;
 use App\Models\Organization;
 use App\Models\User;
+use App\Enums\NotificationType;
+use App\Models\Notification;
 use App\Services\Readiness\ReadyForProcurementEvaluationService;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
@@ -314,18 +316,77 @@ final class SppgDashboardProjectionService
                 )
                 ->values();
 
-        $draftForecastCount =
-            DemandForecast::query()
-                ->where(
-                    'sppg_organization_id',
-                    $organizationId
-                )
-                ->where(
-                    'status',
-                    ForecastStatus::DRAFT
-                        ->value
-                )
-                ->count();
+                $draftForecastCount =
+    DemandForecast::query()
+        ->where(
+            'sppg_organization_id',
+            $organizationId
+        )
+        ->where(
+            'status',
+            ForecastStatus::DRAFT
+                ->value
+        )
+        ->count();
+        
+/*
+ * Recent RFP transitions menggunakan
+ * notification history M10 yang sudah
+ * recipient-scoped.
+ *
+ * Dashboard tidak menganggap unread
+ * notification sebagai operational task.
+ */
+$recentRfpTransitions =
+    Notification::query()
+        ->where(
+            'recipient_user_id',
+            $user->id
+        )
+        ->where(
+            'notification_type',
+            NotificationType::RFP
+                ->value
+        )
+        ->orderByDesc(
+            'created_at'
+        )
+        ->orderByDesc('id')
+        ->limit(5)
+        ->get()
+        ->map(
+            static function (
+                Notification $notification
+            ): array {
+                return [
+                    'id' =>
+                        $notification->id,
+
+                    'priority' =>
+                        $notification
+                            ->priority
+                            ->value,
+
+                    'title' =>
+                        $notification
+                            ->title,
+
+                    'message' =>
+                        $notification
+                            ->message,
+
+                    'action_url' =>
+                        $notification
+                            ->action_url,
+
+                    'created_at' =>
+                        $notification
+                            ->created_at
+                            ?->toIso8601String(),
+                ];
+            }
+        )
+        ->values();
 
         $readyCount =
             $forecastPayloads
@@ -389,9 +450,11 @@ final class SppgDashboardProjectionService
                 'draft_forecast_count' =>
                     $draftForecastCount,
             ],
+'forecasts' =>
+    $forecastPayloads,
 
-            'forecasts' =>
-                $forecastPayloads,
+'recentRfpTransitions' =>
+    $recentRfpTransitions,
         ];
     }
 }
