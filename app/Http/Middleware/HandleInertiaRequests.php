@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Notification;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use App\Support\Demo\DemoAccountRegistry;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -30,6 +31,32 @@ class HandleInertiaRequests extends Middleware
         if ($user) {
             $user->loadMissing('organization');
         }
+
+        $demoEnabled = (bool) config(
+    'siagapasok.demo.enabled',
+    false
+);
+
+$demoAccounts =
+    $demoEnabled && $user
+        ? array_map(
+            static fn (
+                array $account
+            ): array => [
+                ...$account,
+                'href' => route(
+                    'demo.switch-account',
+                    [
+                        'account' =>
+                            $account['key'],
+                    ]
+                ),
+            ],
+            DemoAccountRegistry::options(
+                $user
+            )
+        )
+        : [];
 
         $unreadNotificationCount = $user === null
             ? 0
@@ -81,15 +108,15 @@ class HandleInertiaRequests extends Middleware
             ],
 
             'demo' => [
-                'enabled' => (bool) config(
-                    'siagapasok.demo.enabled',
-                    false
-                ),
-                'label' => (string) config(
-                    'siagapasok.demo.label',
-                    'SIMULASI'
-                ),
-            ],
+    'enabled' => $demoEnabled,
+
+    'label' => (string) config(
+        'siagapasok.demo.label',
+        'SIMULASI'
+    ),
+
+    'accounts' => $demoAccounts,
+],
 
             'notification_center' => [
                 'unread_count' => $unreadNotificationCount,

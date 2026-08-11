@@ -1,5 +1,5 @@
-import { Link, usePage } from "@inertiajs/react";
-import { Bell, Menu } from "lucide-react";
+import { Link, router, usePage } from "@inertiajs/react";
+import { Bell, Menu, UsersRound } from "lucide-react";
 
 function SidebarNavigationItem({ item }) {
     const Icon = item.icon;
@@ -35,6 +35,65 @@ function SidebarNavigationItem({ item }) {
     );
 }
 
+function DemoRoleSwitch({ accounts = [] }) {
+    const currentAccount =
+        accounts.find((account) => account.current) ?? null;
+
+    const handleChange = (event) => {
+        const nextAccount = accounts.find(
+            (account) => account.key === event.target.value,
+        );
+
+        if (!nextAccount || nextAccount.current) {
+            return;
+        }
+
+        router.post(nextAccount.href);
+    };
+
+    if (accounts.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="hidden items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 xl:flex">
+            <UsersRound
+                className="size-3.5 shrink-0 text-violet-600"
+                aria-hidden="true"
+            />
+
+            <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-700">
+                    Demo Role Switch
+                </span>
+
+                <select
+                    value={currentAccount?.key ?? ""}
+                    onChange={handleChange}
+                    className="h-7 max-w-[220px] rounded-md border border-violet-200 bg-white px-2 text-xs font-medium text-violet-950 outline-none transition focus:border-violet-400 focus:ring-2 focus:ring-violet-200"
+                    aria-label="Demo Role Switch"
+                >
+                    {!currentAccount && (
+                        <option value="" disabled>
+                            Pilih akun simulasi
+                        </option>
+                    )}
+
+                    {accounts.map((account) => (
+                        <option
+                            key={account.key}
+                            value={account.key}
+                        >
+                            {account.label} ·{" "}
+                            {account.organization_label}
+                        </option>
+                    ))}
+                </select>
+            </div>
+        </div>
+    );
+}
+
 export default function AppShell({
     children,
     pageTitle,
@@ -50,6 +109,10 @@ export default function AppShell({
     const demoContext = page.props?.demo ?? {};
     const demoEnabled = Boolean(demoContext.enabled);
     const demoLabel = demoContext.label ?? "SIMULASI";
+
+    const demoAccounts = Array.isArray(demoContext.accounts)
+    ? demoContext.accounts
+    : [];
 
     const notificationCenter = page.props?.notification_center ?? {};
 
@@ -180,8 +243,12 @@ export default function AppShell({
                         </div>
                     </div>
 
-                    <div className="ml-4 flex shrink-0 items-center gap-2">
-                        {demoEnabled && (
+<div className="ml-4 flex shrink-0 items-center gap-2">
+    {demoEnabled && (
+        <DemoRoleSwitch accounts={demoAccounts} />
+    )}
+
+    {demoEnabled && (
                             <div
                                 className="flex items-center gap-1.5 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-violet-700"
                                 aria-label={`Mode ${demoLabel}`}

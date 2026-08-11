@@ -44,6 +44,7 @@ use App\Http\Controllers\Sppg\ForecastReadinessController;
 use App\Http\Controllers\Sppg\SppgDashboardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\Kdkmp\CommitmentCancellationController;
+use App\Http\Controllers\Demo\DemoAccountSwitchController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -71,6 +72,26 @@ Route::middleware([
         '/logout',
         [AuthenticatedSessionController::class, 'destroy']
     )->name('logout');
+
+
+    /*
+|--------------------------------------------------------------------------
+| Controlled Demo — Account Switch
+|--------------------------------------------------------------------------
+|
+| Presentation utility only.
+|
+| Target bukan arbitrary User ID. Parameter hanya merupakan deterministic
+| registry key yang kembali divalidasi oleh DemoAccountRegistry.
+|
+*/
+
+Route::post(
+    '/demo/switch-account/{account}',
+    DemoAccountSwitchController::class
+)
+    ->middleware('demo')
+    ->name('demo.switch-account');
 
     /*
 |--------------------------------------------------------------------------
