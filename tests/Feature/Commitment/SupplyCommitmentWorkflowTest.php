@@ -8,6 +8,11 @@ use App\Enums\NetworkRole;
 use App\Enums\OrganizationType;
 use App\Enums\SupplyConfidence;
 use App\Enums\UserRole;
+use App\Enums\AuditSource;
+use App\Services\Commitment\CommitmentLifecycleService;
+use App\Services\Notification\DerivedForecastStateObservationService;
+use App\Services\Notification\OperationalNotificationService;
+use Carbon\CarbonImmutable;
 use App\Models\Commodity;
 use App\Models\CommitmentConfidenceEvent;
 use App\Models\CommitmentVersion;
@@ -811,6 +816,410 @@ class SupplyCommitmentWorkflowTest extends TestCase
                 ->active_version_id
         );
     }
+
+
+    public function test_commitment_approval_notifies_operator_after_manager_decision(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'APPROVAL-NOTIFICATION'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    /*
+     * Submit memakai service nyata.
+     *
+     * Outcome mock baru dipasang sesudah submit
+     * supaya expectation hanya mengunci keputusan
+     * Manager.
+     */
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $notificationService =
+        $this->mock(
+            OperationalNotificationService::class
+        );
+
+    $notificationService
+        ->shouldReceive(
+            'commitmentApproved'
+        )
+        ->once()
+        ->withArgs(
+            fn (
+                SupplyCommitment $notifiedCommitment,
+                CommitmentVersion $notifiedVersion,
+            ): bool =>
+                $notifiedCommitment->id
+                    === $commitment->id
+                && $notifiedVersion->id
+                    === $version->id
+        );
+
+    $workflowWithNotification =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $approved =
+        $workflowWithNotification
+            ->approve(
+                $context['manager'],
+                $version->fresh()
+            );
+
+    $this->assertSame(
+        CommitmentApprovalStatus::APPROVED,
+        $approved->approval_status
+    );
+}
+
+public function test_commitment_rejection_notifies_operator_after_manager_decision(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'REJECTION-NOTIFICATION'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $notificationService =
+        $this->mock(
+            OperationalNotificationService::class
+        );
+
+    $notificationService
+        ->shouldReceive(
+            'commitmentRejected'
+        )
+        ->once()
+        ->withArgs(
+            fn (
+                SupplyCommitment $notifiedCommitment,
+                CommitmentVersion $notifiedVersion,
+            ): bool =>
+                $notifiedCommitment->id
+                    === $commitment->id
+                && $notifiedVersion->id
+                    === $version->id
+        );
+
+    $workflowWithNotification =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $rejected =
+        $workflowWithNotification
+            ->reject(
+                $context['manager'],
+                $version->fresh(),
+                'Kapasitas belum dapat disetujui.'
+            );
+
+    $this->assertSame(
+        CommitmentApprovalStatus::REJECTED,
+        $rejected->approval_status
+    );
+}
+
+public function test_approved_commitment_expires_only_after_availability_end_boundary(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'EXPIRY-BOUNDARY'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $workflow->approve(
+        $context['manager'],
+        $version
+    );
+
+    $commitment->refresh();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $commitment->lifecycle_status
+    );
+
+    $this->assertSame(
+        SupplyConfidence::GREEN,
+        $commitment->current_confidence
+    );
+
+    /*
+     * Canonical boundary:
+     *
+     * T == availability_end_at
+     * masih valid.
+     */
+    $atBoundary =
+        app(
+            CommitmentLifecycleService::class
+        )->expireIfDue(
+            $commitment,
+            CarbonImmutable::parse(
+                '2026-08-20 13:00:00'
+            )
+        );
+
+    $this->assertFalse(
+        $atBoundary
+    );
+
+    $commitment->refresh();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::ACTIVE,
+        $commitment->lifecycle_status
+    );
+
+    $this->assertNull(
+        $commitment->expired_at
+    );
+}
+
+public function test_commitment_expiry_is_system_audited_preserves_confidence_and_is_idempotent(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'EXPIRY-LIFECYCLE'
+        );
+
+    $workflow =
+        app(
+            CommitmentWorkflowService::class
+        );
+
+    $commitment =
+        $workflow->createDraft(
+            $context['operator'],
+            $this->commitmentPayload(
+                $context
+            )
+        );
+
+    $version =
+        $commitment
+            ->versions()
+            ->firstOrFail();
+
+    $workflow->submit(
+        $context['operator'],
+        $version
+    );
+
+    $workflow->approve(
+        $context['manager'],
+        $version
+    );
+
+    $commitment->refresh();
+
+    $this->assertSame(
+        SupplyConfidence::GREEN,
+        $commitment->current_confidence
+    );
+
+    /*
+     * RefreshDatabase membungkus test dalam
+     * transaction, sehingga callback afterCommit
+     * tidak cocok digunakan sebagai assertion
+     * integration di file ini.
+     *
+     * Yang perlu dikunci di unit domain ini adalah
+     * lifecycle service memang meminta causal
+     * observation terhadap Forecast yang benar.
+     */
+    $derivedObserver =
+        $this->mock(
+            DerivedForecastStateObservationService::class
+        );
+
+    $derivedObserver
+        ->shouldReceive(
+            'observeAfterCommit'
+        )
+        ->once()
+        ->withArgs(
+            fn (
+                DemandForecast $forecast
+            ): bool =>
+                $forecast->id
+                === $context['forecast']->id
+        );
+
+    $lifecycleService =
+        app(
+            CommitmentLifecycleService::class
+        );
+
+    $evaluationTime =
+        CarbonImmutable::parse(
+            '2026-08-20 13:00:01'
+        );
+
+    $changed =
+        $lifecycleService
+            ->expireIfDue(
+                $commitment,
+                $evaluationTime
+            );
+
+    $this->assertTrue(
+        $changed
+    );
+
+    $commitment->refresh();
+
+    $this->assertSame(
+        CommitmentLifecycleStatus::EXPIRED,
+        $commitment->lifecycle_status
+    );
+
+    $this->assertTrue(
+        $commitment
+            ->expired_at
+            ->equalTo(
+                $evaluationTime
+            )
+    );
+
+    /*
+     * Lifecycle expiry bukan confidence event.
+     *
+     * Historical confidence terakhir tetap GREEN,
+     * sementara eligibility menjadi FALSE karena
+     * lifecycle bukan ACTIVE.
+     */
+    $this->assertSame(
+        SupplyConfidence::GREEN,
+        $commitment->current_confidence
+    );
+
+    $this->assertDatabaseHas(
+        'audit_logs',
+        [
+            'entity_type' =>
+                $commitment
+                    ->getMorphClass(),
+
+            'entity_id' =>
+                $commitment->id,
+
+            'source' =>
+                AuditSource::SYSTEM
+                    ->value,
+
+            'action' =>
+                'COMMITMENT_EXPIRED',
+
+            'actor_user_id' =>
+                null,
+        ]
+    );
+
+    /*
+     * Retry pada logical event yang sama tidak
+     * membuat state transition atau audit kedua.
+     */
+    $changedAgain =
+        $lifecycleService
+            ->expireIfDue(
+                $commitment->fresh(),
+                CarbonImmutable::parse(
+                    '2026-08-20 14:00:00'
+                )
+            );
+
+    $this->assertFalse(
+        $changedAgain
+    );
+
+    $this->assertSame(
+        1,
+        \App\Models\AuditLog::query()
+            ->where(
+                'entity_type',
+                $commitment
+                    ->getMorphClass()
+            )
+            ->where(
+                'entity_id',
+                $commitment->id
+            )
+            ->where(
+                'action',
+                'COMMITMENT_EXPIRED'
+            )
+            ->count()
+    );
+}
+
 
     private function createOperationalContext(
         string $suffix
