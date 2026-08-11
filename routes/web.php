@@ -27,9 +27,13 @@ use App\Http\Controllers\Kdkmp\FallbackOfferActionController;
 use App\Http\Controllers\Kdkmp\FallbackOfferController;
 use App\Http\Controllers\Kdkmp\FallbackOfferReviewController;
 use App\Http\Controllers\Kdkmp\IncomingFallbackOfferController;
+use App\Http\Controllers\Kdkmp\DocumentRecordController;
+use App\Http\Controllers\Kdkmp\ReadinessApprovalController;
+use App\Http\Controllers\Kdkmp\ReadinessController;
 use App\Http\Controllers\RoleLandingController;
 use App\Http\Controllers\Sppg\DemandForecastActionController;
 use App\Http\Controllers\Sppg\DemandForecastController;
+use App\Http\Controllers\Sppg\ForecastReadinessController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function (): void {
@@ -189,6 +193,16 @@ Route::middleware([
                     'index',
                 ]
             )->name('forecasts.index');
+
+            Route::get(
+    '/forecasts/{forecast}/readiness',
+    [
+        ForecastReadinessController::class,
+        'show',
+    ]
+)->name(
+    'forecasts.readiness.show'
+);
 
             Route::get(
                 '/forecasts/create',
@@ -548,6 +562,144 @@ Route::middleware([
             'kdkmp.commitments.recovery.store'
         );
     });
+
+    /*
+|--------------------------------------------------------------------------
+| KDKMP — Logistics & Document Readiness
+|--------------------------------------------------------------------------
+|
+| Readiness adalah organization-scoped per Forecast + Contributor + Type.
+|
+| Operator:
+| - prepare;
+| - edit current DRAFT items;
+| - submit;
+| - create immutable revision.
+|
+| Manager memperoleh read access melalui shared detail,
+| tetapi approval commands berada di Manager surface.
+|
+*/
+
+Route::get(
+    '/kdkmp/readiness',
+    [
+        ReadinessController::class,
+        'index',
+    ]
+)->name(
+    'kdkmp.readiness.index'
+);
+
+Route::get(
+    '/kdkmp/readiness/{checklist}',
+    [
+        ReadinessController::class,
+        'show',
+    ]
+)->name(
+    'kdkmp.readiness.show'
+);
+
+Route::get(
+    '/kdkmp/documents',
+    [
+        DocumentRecordController::class,
+        'index',
+    ]
+)->name(
+    'kdkmp.documents.index'
+);
+
+Route::middleware(
+    'role:KDKMP_OPERATOR'
+)->group(function (): void {
+    Route::post(
+        '/kdkmp/forecasts/{forecast}/readiness/{type}/prepare',
+        [
+            ReadinessController::class,
+            'prepare',
+        ]
+    )
+        ->where(
+            'type',
+            'logistics|document'
+        )
+        ->name(
+            'kdkmp.readiness.prepare'
+        );
+
+    Route::put(
+        '/kdkmp/readiness/{checklist}/items/{item}',
+        [
+            ReadinessController::class,
+            'updateItem',
+        ]
+    )->name(
+        'kdkmp.readiness.items.update'
+    );
+
+    Route::post(
+        '/kdkmp/readiness/{checklist}/submit',
+        [
+            ReadinessController::class,
+            'submit',
+        ]
+    )->name(
+        'kdkmp.readiness.submit'
+    );
+
+    Route::post(
+        '/kdkmp/readiness/{checklist}/revisions',
+        [
+            ReadinessController::class,
+            'createRevision',
+        ]
+    )->name(
+        'kdkmp.readiness.revisions.store'
+    );
+
+    Route::post(
+        '/kdkmp/documents',
+        [
+            DocumentRecordController::class,
+            'store',
+        ]
+    )->name(
+        'kdkmp.documents.store'
+    );
+
+    Route::put(
+        '/kdkmp/documents/{documentRecord}',
+        [
+            DocumentRecordController::class,
+            'update',
+        ]
+    )->name(
+        'kdkmp.documents.update'
+    );
+
+    Route::post(
+        '/kdkmp/documents/{documentRecord}/validate',
+        [
+            DocumentRecordController::class,
+            'markValid',
+        ]
+    )->name(
+        'kdkmp.documents.validate'
+    );
+
+    Route::post(
+        '/kdkmp/documents/{documentRecord}/revoke',
+        [
+            DocumentRecordController::class,
+            'revoke',
+        ]
+    )->name(
+        'kdkmp.documents.revoke'
+    );
+});
+
 
     /*
     |--------------------------------------------------------------------------
@@ -1031,4 +1183,55 @@ Route::middleware(
     )
         ->middleware('role:KDKMP_MANAGER')
         ->name('kdkmp.manager.dashboard');
+
+    
+        /*
+|--------------------------------------------------------------------------
+| Readiness Approval Queue
+|--------------------------------------------------------------------------
+|
+| Manager hanya review + explicit decision.
+| Tidak ada endpoint edit payload pada surface ini.
+|
+*/
+
+Route::get(
+    '/readiness',
+    [
+        ReadinessApprovalController::class,
+        'index',
+    ]
+)->name(
+    'readiness.index'
+);
+
+Route::get(
+    '/readiness/{checklist}',
+    [
+        ReadinessApprovalController::class,
+        'show',
+    ]
+)->name(
+    'readiness.show'
+);
+
+Route::post(
+    '/readiness/{checklist}/approve',
+    [
+        ReadinessApprovalController::class,
+        'approve',
+    ]
+)->name(
+    'readiness.approve'
+);
+
+Route::post(
+    '/readiness/{checklist}/reject',
+    [
+        ReadinessApprovalController::class,
+        'reject',
+    ]
+)->name(
+    'readiness.reject'
+);
 });
