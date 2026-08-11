@@ -10,6 +10,7 @@ use App\Http\Requests\Kdkmp\UpdateDocumentRecordRequest;
 use App\Http\Requests\Kdkmp\ValidateDocumentRecordRequest;
 use App\Models\DocumentRecord;
 use App\Models\ReadinessRequirement;
+use App\Enums\RequirementScope;
 use App\Services\Readiness\DocumentRecordService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Gate;
@@ -62,6 +63,10 @@ class DocumentRecordController extends Controller
                     'readiness_type',
                     ReadinessType::DOCUMENT->value
                 )
+                ->where(
+    'requirement_scope',
+    RequirementScope::ORGANIZATION->value
+)
                 ->where(
                     'is_active',
                     true
@@ -284,4 +289,4 @@ class DocumentRecordController extends Controller
                     : null,
         ];
     }
-}
+} 

@@ -11,6 +11,7 @@ use App\Http\Requests\Kdkmp\UpdateReadinessItemRequest;
 use App\Models\DemandForecast;
 use App\Models\ReadinessChecklist;
 use App\Models\ReadinessItem;
+use App\Models\DocumentRecord;
 use App\Services\Readiness\ReadinessChecklistPreparationService;
 use App\Services\Readiness\ReadinessChecklistRevisionService;
 use App\Services\Readiness\ReadinessChecklistWorkflowService;
@@ -111,6 +112,82 @@ class ReadinessController extends Controller
 
         $user =
             request()->user();
+        
+            $availableDocuments =
+    collect();
+
+if (
+    $checklist->readiness_type
+        === ReadinessType::DOCUMENT
+) {
+    $requirementIds =
+        $checklist
+            ->items
+            ->pluck(
+                'requirement_id'
+            )
+            ->unique()
+            ->values();
+
+    $availableDocuments =
+        DocumentRecord::query()
+            ->where(
+                'organization_id',
+                $checklist
+                    ->organization_id
+            )
+            ->whereIn(
+                'requirement_id',
+                $requirementIds
+            )
+            ->orderBy(
+                'document_name'
+            )
+            ->orderByDesc(
+                'revision_no'
+            )
+            ->get()
+            ->map(
+                fn (
+                    DocumentRecord $record
+                ): array => [
+                    'id' =>
+                        $record->id,
+
+                    'requirement_id' =>
+                        $record
+                            ->requirement_id,
+
+                    'document_name' =>
+                        $record
+                            ->document_name,
+
+                    'reference_number' =>
+                        $record
+                            ->reference_number,
+
+                    'status' =>
+                        $record
+                            ->status
+                            ->value,
+
+                    'revision_no' =>
+                        $record
+                            ->revision_no,
+
+                    'valid_from' =>
+                        $record
+                            ->valid_from
+                            ?->toIso8601String(),
+
+                    'expires_at' =>
+                        $record
+                            ->expires_at
+                            ?->toIso8601String(),
+                ]
+            )
+            ->values();
+}
 
         return Inertia::render(
             'Kdkmp/Readiness/Show',

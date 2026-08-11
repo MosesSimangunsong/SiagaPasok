@@ -1140,58 +1140,22 @@ Route::middleware(
             );
 
             Route::post(
-                '/incoming-offers/{fallbackOffer}/reject',
-                [
-                    IncomingFallbackOfferController::class,
-                    'reject',
-                ]
-            )->name(
-                'incoming-offers.reject'
-            );
-        });
+    '/incoming-offers/{fallbackOffer}/reject',
+    [
+        IncomingFallbackOfferController::class,
+        'reject',
+    ]
+)->name(
+    'incoming-offers.reject'
+);
 
-    Route::inertia(
-        '/kdkmp/operator',
-        'RoleLanding',
-        [
-            'workspace' => 'Workspace KDKMP',
-            'roleLabel' => 'KDKMP Operator / FRPL',
-            'description' => (
-                'Kelola data pasokan dan koordinasi '
-                .'operasional KDKMP.'
-            ),
-            'actionLabel' => 'Lihat Forecast PUBLISHED',
-            'actionHref' => '/kdkmp/forecasts',
-        ]
-    )
-        ->middleware('role:KDKMP_OPERATOR')
-        ->name('kdkmp.operator.dashboard');
-
-    Route::inertia(
-        '/kdkmp/manager',
-        'RoleLanding',
-        [
-            'workspace' => 'Workspace KDKMP',
-            'roleLabel' => 'KDKMP Manager',
-            'description' => (
-                'Kelola approval dan keputusan '
-                .'pasokan KDKMP.'
-            ),
-            'actionLabel' => 'Buka Approval Queue',
-            'actionHref' => '/kdkmp/manager/approvals',
-        ]
-    )
-        ->middleware('role:KDKMP_MANAGER')
-        ->name('kdkmp.manager.dashboard');
-
-    
-        /*
+/*
 |--------------------------------------------------------------------------
 | Readiness Approval Queue
 |--------------------------------------------------------------------------
 |
-| Manager hanya review + explicit decision.
-| Tidak ada endpoint edit payload pada surface ini.
+| Manager hanya melakukan read-only review dan explicit decision.
+| Payload readiness tetap milik Operator.
 |
 */
 
@@ -1234,4 +1198,39 @@ Route::post(
 )->name(
     'readiness.reject'
 );
+        });
+
+    Route::inertia(
+        '/kdkmp/operator',
+        'RoleLanding',
+        [
+            'workspace' => 'Workspace KDKMP',
+            'roleLabel' => 'KDKMP Operator / FRPL',
+            'description' => (
+                'Kelola data pasokan dan koordinasi '
+                .'operasional KDKMP.'
+            ),
+            'actionLabel' => 'Lihat Forecast PUBLISHED',
+            'actionHref' => '/kdkmp/forecasts',
+        ]
+    )
+        ->middleware('role:KDKMP_OPERATOR')
+        ->name('kdkmp.operator.dashboard');
+
+    Route::inertia(
+        '/kdkmp/manager',
+        'RoleLanding',
+        [
+            'workspace' => 'Workspace KDKMP',
+            'roleLabel' => 'KDKMP Manager',
+            'description' => (
+                'Kelola approval dan keputusan '
+                .'pasokan KDKMP.'
+            ),
+            'actionLabel' => 'Buka Approval Queue',
+            'actionHref' => '/kdkmp/manager/approvals',
+        ]
+    )
+        ->middleware('role:KDKMP_MANAGER')
+        ->name('kdkmp.manager.dashboard');
 });
