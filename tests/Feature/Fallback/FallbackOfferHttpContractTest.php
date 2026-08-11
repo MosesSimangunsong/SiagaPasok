@@ -1360,6 +1360,158 @@ class FallbackOfferHttpContractTest extends TestCase
         );
     }
 
+
+    public function test_supplier_manager_dashboard_contains_pending_outgoing_offer_review(): void
+{
+    $context =
+        $this->createPendingOfferContext(
+            'MANAGER-DASHBOARD-OUTGOING'
+        );
+
+    $this->actingAs(
+        $context['networkManager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'summary.total_pending_decisions',
+                        1
+                    )
+                    ->where(
+                        'summary.outgoing_offer_review_count',
+                        1
+                    )
+                    ->where(
+                        'summary.incoming_offer_decision_count',
+                        0
+                    )
+                    ->where(
+                        'decisionGroups.3.key',
+                        'outgoing_offers'
+                    )
+                    ->has(
+                        'decisionGroups.3.items',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.3.items.0.id',
+                        $context['offer']->id
+                    )
+                    ->where(
+                        'decisionGroups.3.items.0.href',
+                        '/kdkmp/fallback-offers/'
+                        .$context['offer']->id
+                    )
+        );
+}
+
+public function test_available_offer_becomes_requester_manager_decision_and_is_no_longer_supplier_manager_work(): void
+{
+    $context =
+        $this->createAvailableOfferContext(
+            'MANAGER-DASHBOARD-INCOMING'
+        );
+
+    $this->assertSame(
+        FallbackOfferStatus::AVAILABLE,
+        $context['offer']
+            ->fresh()
+            ->status
+    );
+
+    /*
+     * Requester Manager sekarang memiliki
+     * explicit Accept / Reject decision.
+     */
+    $this->actingAs(
+        $context['manager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'summary.total_pending_decisions',
+                        1
+                    )
+                    ->where(
+                        'summary.incoming_offer_decision_count',
+                        1
+                    )
+                    ->where(
+                        'summary.outgoing_offer_review_count',
+                        0
+                    )
+                    ->where(
+                        'decisionGroups.4.key',
+                        'incoming_offers'
+                    )
+                    ->has(
+                        'decisionGroups.4.items',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.4.items.0.id',
+                        $context['offer']->id
+                    )
+                    ->where(
+                        'decisionGroups.4.items.0.href',
+                        '/kdkmp/manager/incoming-offers/'
+                        .$context['offer']->id
+                    )
+        );
+
+    /*
+     * Supplier Manager sudah menyelesaikan
+     * pekerjaannya saat Offer menjadi AVAILABLE.
+     * AVAILABLE tidak boleh tetap dianggap
+     * pending supplier review.
+     */
+    $this->actingAs(
+        $context['networkManager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'summary.outgoing_offer_review_count',
+                        0
+                    )
+                    ->where(
+                        'summary.incoming_offer_decision_count',
+                        0
+                    )
+        );
+}
+
+
     private function createDraftOfferContext(
         string $suffix
     ): array {

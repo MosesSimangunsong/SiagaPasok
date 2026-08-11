@@ -1584,6 +1584,75 @@ public function test_document_workspace_renders_only_reusable_organization_scope
         );
 }
 
+
+public function test_manager_dashboard_includes_current_pending_readiness_approval(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'MANAGER-DASHBOARD-READINESS'
+        );
+
+    $checklist =
+        $this->createSubmittedLogisticsChecklist(
+            $context,
+            'LOG-MANAGER-DASHBOARD'
+        );
+
+    $this->assertSame(
+        ReadinessApprovalStatus
+            ::PENDING_APPROVAL,
+        $checklist
+            ->fresh()
+            ->status
+    );
+
+    $this->actingAs(
+        $context['manager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'summary.total_pending_decisions',
+                        1
+                    )
+                    ->where(
+                        'summary.readiness_approval_count',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.5.key',
+                        'readiness'
+                    )
+                    ->has(
+                        'decisionGroups.5.items',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.5.items.0.id',
+                        $checklist->id
+                    )
+                    ->where(
+                        'decisionGroups.5.items.0.href',
+                        '/kdkmp/manager/readiness/'
+                        .$checklist->id
+                    )
+                    ->where(
+                        'decisionGroups.5.items.0.context',
+                        'Checklist v'
+                        .$checklist->version_no
+                    )
+        );
+}
     private function createSubmittedLogisticsChecklist(
         array $context,
         string $requirementCode,

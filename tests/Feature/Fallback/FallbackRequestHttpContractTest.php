@@ -848,6 +848,80 @@ class FallbackRequestHttpContractTest extends TestCase
         );
     }
 
+
+    public function test_manager_dashboard_scopes_pending_fallback_request_decisions_to_own_organization(): void
+{
+    $contextA =
+        $this->createPendingRequestContext(
+            'DASHBOARD-A'
+        );
+
+    $contextB =
+        $this->createPendingRequestContext(
+            'DASHBOARD-B'
+        );
+
+    $this->actingAs(
+        $contextA['manager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'summary.total_pending_decisions',
+                        1
+                    )
+                    ->where(
+                        'summary.fallback_request_approval_count',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.2.key',
+                        'fallback_requests'
+                    )
+                    ->has(
+                        'decisionGroups.2.items',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.2.items.0.id',
+                        $contextA['request']->id
+                    )
+                    ->where(
+                        'decisionGroups.2.items.0.href',
+                        '/kdkmp/manager/fallback-requests/'
+                        .$contextA['request']->id
+                    )
+        );
+
+    /*
+     * Request tenant B benar-benar ada.
+     * Ketidakhadirannya pada dashboard A
+     * harus berasal dari organization scope,
+     * bukan karena fixture tidak dibuat.
+     */
+    $this->assertDatabaseHas(
+        'fallback_requests',
+        [
+            'id' =>
+                $contextB['request']->id,
+
+            'status' =>
+                FallbackRequestStatus
+                    ::PENDING_APPROVAL
+                    ->value,
+        ]
+    );
+}
     private function createDraftRequestContext(
         string $suffix
     ): array {

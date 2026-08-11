@@ -27,6 +27,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
+use Inertia\Testing\AssertableInertia as Assert;
 
 class CommitmentConfidenceRecoveryTest extends TestCase
 {
@@ -978,6 +979,106 @@ class CommitmentConfidenceRecoveryTest extends TestCase
         );
     }
 
+
+    public function test_manager_dashboard_includes_pending_recovery_and_supply_risk(): void
+{
+    $context =
+        $this->createApprovedContext(
+            'MANAGER-DASHBOARD-RECOVERY'
+        );
+
+    $confidence =
+        app(
+            ConfidenceService::class
+        );
+
+    $confidence->downgrade(
+        actor:
+            $context['operator'],
+
+        commitment:
+            $context['commitment'],
+
+        toConfidence:
+            SupplyConfidence::YELLOW,
+
+        reasonCode:
+            'DASHBOARD_RISK',
+
+        reasonNote:
+            'Risiko pasokan untuk contract dashboard.'
+    );
+
+    $recovery =
+        $confidence->requestRecovery(
+            $context['operator'],
+            $context['commitment']
+                ->fresh(),
+            'Operator mengajukan pemulihan confidence.'
+        );
+
+    $this->assertSame(
+        RecoveryRequestStatus
+            ::PENDING_APPROVAL,
+        $recovery->status
+    );
+
+    $this->actingAs(
+        $context['manager']
+    )
+        ->get(
+            '/kdkmp/manager'
+        )
+        ->assertOk()
+        ->assertInertia(
+            fn (
+                Assert $page
+            ) =>
+                $page
+                    ->component(
+                        'Kdkmp/Manager/Dashboard'
+                    )
+                    ->where(
+                        'summary.total_pending_decisions',
+                        1
+                    )
+                    ->where(
+                        'summary.recovery_review_count',
+                        1
+                    )
+                    ->where(
+                        'summary.supply_risk_count',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.1.key',
+                        'recoveries'
+                    )
+                    ->has(
+                        'decisionGroups.1.items',
+                        1
+                    )
+                    ->where(
+                        'decisionGroups.1.items.0.id',
+                        $recovery->id
+                    )
+                    ->where(
+                        'decisionGroups.1.items.0.href',
+                        '/kdkmp/manager/recoveries/'
+                        .$recovery->id
+                    )
+                    ->where(
+                        'supplyRisks.0.id',
+                        $context['commitment']->id
+                    )
+                    ->where(
+                        'supplyRisks.0.current_confidence',
+                        SupplyConfidence
+                            ::YELLOW
+                            ->value
+                    )
+        );
+}
     private function createApprovedContext(
         string $suffix
     ): array {
