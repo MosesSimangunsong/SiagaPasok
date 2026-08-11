@@ -3,6 +3,7 @@ import AppShell from "@/Layouts/AppShell";
 import { router, usePage } from "@inertiajs/react";
 import {
     Activity,
+    Bell,
     CalendarDays,
     CheckCircle2,
     ClipboardCheck,
@@ -142,6 +143,15 @@ export default function KdkmpLayout({
             "/kdkmp/documents",
         ),
     },
+
+    {
+    label: "Notifikasi",
+    href: "/notifications",
+    icon: Bell,
+    active: currentUrl.startsWith(
+        "/notifications",
+    ),
+},
 ];
 
     const managerNavigation = [
@@ -213,6 +223,14 @@ export default function KdkmpLayout({
             "/kdkmp/manager/readiness",
         ),
     },
+    {
+    label: "Notifikasi",
+    href: "/notifications",
+    icon: Bell,
+    active: currentUrl.startsWith(
+        "/notifications",
+    ),
+},
 ];
 
     const navigation =

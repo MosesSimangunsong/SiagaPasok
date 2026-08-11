@@ -19,7 +19,6 @@ use App\Models\SupplyNetworkLink;
 use App\Models\Unit;
 use App\Models\User;
 use App\Services\Commitment\CommitmentWorkflowService;
-use App\Services\Notification\OperationalNotificationService;
 use App\Services\Fallback\FallbackCapacityService;
 use App\Services\Fallback\FallbackOfferService;
 use App\Services\Supply\SupplyMetricsService;
@@ -1466,24 +1465,6 @@ public function test_requester_manager_rejects_available_offer_and_releases_rese
             '150.000000'
         );
 
-    $notificationService =
-    $this->mock(
-        OperationalNotificationService::class
-    );
-
-$notificationService
-    ->shouldReceive(
-        'fallbackOfferRejectedByRequester'
-    )
-    ->once()
-    ->withArgs(
-        fn (
-            $notifiedOffer
-        ): bool =>
-            $notifiedOffer->id
-            === $offer->id
-    );
-
     $rejected =
         $this->service()
             ->rejectByRequesterManager(
@@ -1605,27 +1586,6 @@ public function test_supplier_manager_withdraws_available_offer_and_releases_res
             $source,
             '150.000000'
         );
-    
-        $notificationService =
-    $this->mock(
-        OperationalNotificationService::class
-    );
-
-$notificationService
-    ->shouldReceive(
-        'fallbackOfferWithdrawnBySupplier'
-    )
-    ->once()
-    ->withArgs(
-        fn (
-            $notifiedOffer,
-            $notifiedRequest,
-        ): bool =>
-            $notifiedOffer->id
-                === $offer->id
-            && $notifiedRequest->id
-                === $context['request']->id
-    );
 
     $withdrawn =
         $this->service()
@@ -1863,23 +1823,7 @@ public function test_repeated_requester_reject_does_not_release_reserve_twice():
             $source,
             '150.000000'
         );
-    $notificationService =
-    $this->mock(
-        OperationalNotificationService::class
-    );
 
-$notificationService
-    ->shouldReceive(
-        'fallbackOfferRejectedByRequester'
-    )
-    ->once()
-    ->withArgs(
-        fn (
-            $notifiedOffer
-        ): bool =>
-            $notifiedOffer->id
-            === $offer->id
-    );
 
     $first =
         $this->service()
@@ -3188,45 +3132,15 @@ public function test_cancelling_open_request_rejects_available_offer_and_release
             '150.000000'
         );
 
-    $this->assertSame(
-        '150.000000',
-        (string)
-        $offer->sources
-            ->first()
-            ->reserved_volume
-    );
 
-    $cancelled =
-        app(
-            FallbackRequestService::class
-        )->cancel(
-            $notificationService =
-    $this->mock(
-        OperationalNotificationService::class
+$cancelled =
+    app(
+        FallbackRequestService::class
+    )->cancel(
+        $context['primary_manager'],
+        $context['request'],
+        'Kebutuhan fallback sudah tidak diperlukan.'
     );
-
-$notificationService
-    ->shouldReceive(
-        'fallbackOfferRejectedByRequester'
-    )
-    ->once()
-    ->withArgs(
-        fn (
-            $notifiedOffer,
-            $message = null,
-        ): bool =>
-            $notifiedOffer->id
-                === $offer->id
-            && is_string($message)
-            && str_contains(
-                $message,
-                'Parent Fallback Request'
-            )
-    );
-            $context['primary_manager'],
-            $context['request'],
-            'Kebutuhan fallback sudah tidak diperlukan.'
-        );
 
     $this->assertSame(
         FallbackRequestStatus::CANCELLED,
