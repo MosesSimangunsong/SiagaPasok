@@ -7,6 +7,8 @@ import {
     CheckCircle2,
     ClipboardCheck,
     ClipboardList,
+    FileCheck2,
+    Files,
     Handshake,
     LogOut,
     RefreshCcw,
@@ -89,6 +91,22 @@ export default function KdkmpLayout({
                 "/kdkmp/confidence",
             ),
         },
+        {
+    label: "Readiness",
+    href: "/kdkmp/readiness",
+    icon: FileCheck2,
+    active: currentUrl.startsWith(
+        "/kdkmp/readiness",
+    ),
+},
+{
+    label: "Document Records",
+    href: "/kdkmp/documents",
+    icon: Files,
+    active: currentUrl.startsWith(
+        "/kdkmp/documents",
+    ),
+},
     ];
 
     const managerNavigation = [
@@ -120,6 +138,14 @@ export default function KdkmpLayout({
                 "/kdkmp/manager/recoveries",
             ),
         },
+        {
+    label: "Readiness Approval",
+    href: "/kdkmp/manager/readiness",
+    icon: FileCheck2,
+    active: currentUrl.startsWith(
+        "/kdkmp/manager/readiness",
+    ),
+},
     ];
 
     const navigation =
