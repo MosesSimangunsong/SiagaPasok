@@ -2,7 +2,8 @@ import { Link, router, usePage } from "@inertiajs/react";
 import {
     Bell,
     Menu,
-Play,
+    Play,
+    RotateCcw,
     UsersRound,
 } from "lucide-react";
 
@@ -99,12 +100,16 @@ function DemoRoleSwitch({ accounts = [] }) {
     );
 }
 
-function DemoScenarioControl({ action }) {
-    if (!action?.href) {
+function DemoControls({ action, reset }) {
+    if (!action?.href && !reset?.href) {
         return null;
     }
 
     const handleApply = () => {
+        if (!action?.href) {
+            return;
+        }
+
         router.post(
             action.href,
             {},
@@ -114,24 +119,59 @@ function DemoScenarioControl({ action }) {
         );
     };
 
+    const handleReset = () => {
+        if (!reset?.href) {
+            return;
+        }
+
+        const confirmed = window.confirm(
+            reset.confirmation ??
+                "Reset seluruh scenario SIMULASI ke baseline awal?",
+        );
+
+        if (!confirmed) {
+            return;
+        }
+
+        router.post(reset.href);
+    };
+
     return (
         <div className="hidden items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-2 py-1 xl:flex">
             <span className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-[0.08em] text-violet-700">
                 Demo Controls
             </span>
 
-            <button
-                type="button"
-                onClick={handleApply}
-                className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-violet-200 bg-white px-2.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300"
-            >
-<Play
-    className="size-3.5"
-    aria-hidden="true"
-/>
+            {action?.href && (
+                <button
+                    type="button"
+                    onClick={handleApply}
+                    className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-violet-200 bg-white px-2.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                >
+                    <Play
+                        className="size-3.5"
+                        aria-hidden="true"
+                    />
 
-                {action.label}
-            </button>
+                    {action.label}
+                </button>
+            )}
+
+            {reset?.href && (
+                <button
+                    type="button"
+                    onClick={handleReset}
+                    className="flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md border border-violet-200 bg-white px-2.5 text-xs font-semibold text-violet-700 transition-colors hover:bg-violet-100 focus:outline-none focus:ring-2 focus:ring-violet-300"
+                    title="Kembalikan scenario simulasi ke baseline"
+                >
+                    <RotateCcw
+                        className="size-3.5"
+                        aria-hidden="true"
+                    />
+
+                    {reset.label ?? "Reset Demo"}
+                </button>
+            )}
         </div>
     );
 }
@@ -152,11 +192,15 @@ export default function AppShell({
     const demoEnabled = Boolean(demoContext.enabled);
     const demoLabel = demoContext.label ?? "SIMULASI";
 
-    const demoAccounts = Array.isArray(demoContext.accounts)
-    ? demoContext.accounts
-    : [];
+        const demoAccounts = Array.isArray(demoContext.accounts)
+        ? demoContext.accounts
+        : [];
 
-const demoAction = demoContext.action ?? null;
+    const demoAction =
+        demoContext.action ?? null;
+
+    const demoReset =
+        demoContext.reset ?? null;
 
 
     const notificationCenter = page.props?.notification_center ?? {};
@@ -289,9 +333,10 @@ const demoAction = demoContext.action ?? null;
                     </div>
 
 <div className="ml-4 flex shrink-0 items-center gap-2">
-{demoEnabled && demoAction && (
-    <DemoScenarioControl
+{demoEnabled && (demoAction || demoReset) && (
+    <DemoControls
         action={demoAction}
+        reset={demoReset}
     />
 )}
 

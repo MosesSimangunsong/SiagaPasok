@@ -7,6 +7,7 @@ use App\Support\Demo\DemoAccountRegistry;
 use App\Support\Demo\DemoScenarioActionResolver;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
+use App\Support\Demo\DemoIdentifiers;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -99,6 +100,28 @@ class HandleInertiaRequests extends Middleware
                 ];
             }
         }
+
+                $demoReset =
+            $demoEnabled
+            && $user
+            && $user->isSppgUser()
+            && $user->email
+                === DemoIdentifiers::SPPG_EMAIL
+            && $user->organization?->code
+                === DemoIdentifiers::SPPG_CODE
+                ? [
+                    'label' =>
+                        'Reset Demo',
+
+                    'href' =>
+                        route(
+                            'demo.reset'
+                        ),
+
+                    'confirmation' =>
+                        'Reset seluruh scenario SIMULASI ke baseline awal? Forecast 400 kg dan PRIMARY Safe Supply 400 kg akan dibangun ulang. Data non-demo tidak akan dihapus.',
+                ]
+                : null;
 
         $unreadNotificationCount =
             $user === null
@@ -199,6 +222,28 @@ class HandleInertiaRequests extends Middleware
                     $demoAction,
             ],
 
+
+                        'demo' => [
+                'enabled' =>
+                    $demoEnabled,
+
+                'label' =>
+                    (string) config(
+                        'siagapasok.demo.label',
+                        'SIMULASI'
+                    ),
+
+                'accounts' =>
+                    $demoAccounts,
+
+                'action' =>
+                    $demoAction,
+
+                'reset' =>
+                    $demoReset,
+            ],
+
+            
             'notification_center' => [
                 'unread_count' =>
                     $unreadNotificationCount,
