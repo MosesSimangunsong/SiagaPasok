@@ -12,6 +12,10 @@ use App\Enums\ReadinessType;
 use App\Enums\RequirementScope;
 use App\Enums\SupplyConfidence;
 use App\Enums\UserRole;
+use App\Enums\AuditSource;
+use App\Enums\DocumentStatus;
+use App\Models\AuditLog;
+use Illuminate\Validation\ValidationException;
 use App\Models\Commodity;
 use App\Models\CommitmentVersion;
 use App\Models\DemandForecast;
@@ -127,6 +131,158 @@ class ReadinessEvaluationTest extends TestCase
         );
     }
 
+
+    public function test_document_expiry_lifecycle_is_strictly_after_expiry_and_idempotent(): void
+{
+    $context =
+        $this->createOperationalContext(
+            'DOCUMENT-EXPIRY-LIFECYCLE'
+        );
+
+    $documentContext =
+        $this->createApprovedDocumentChecklist(
+            $context,
+            'DOC-EXPIRY-LIFECYCLE'
+        );
+
+    $document =
+        $documentContext[
+            'document'
+        ];
+
+    $originalRevision =
+        $document->revision_no;
+
+    /*
+     * Equality masih VALID.
+     */
+    $changedAtBoundary =
+        $this->documentService()
+            ->expireIfDue(
+                $document,
+                CarbonImmutable::parse(
+                    '2026-08-25 17:00:00'
+                )
+            );
+
+    $this->assertFalse(
+        $changedAtBoundary
+    );
+
+    $this->assertSame(
+        DocumentStatus::VALID,
+        $document
+            ->fresh()
+            ->status
+    );
+
+    /*
+     * Satu detik setelah expiry:
+     * lifecycle materialized EXPIRED.
+     */
+    $changedAfterBoundary =
+        $this->documentService()
+            ->expireIfDue(
+                $document->fresh(),
+                CarbonImmutable::parse(
+                    '2026-08-25 17:00:01'
+                )
+            );
+
+    $this->assertTrue(
+        $changedAfterBoundary
+    );
+
+    $document->refresh();
+
+    $this->assertSame(
+        DocumentStatus::EXPIRED,
+        $document->status
+    );
+
+    /*
+     * Time expiry bukan payload revision.
+     */
+    $this->assertSame(
+        $originalRevision,
+        $document->revision_no
+    );
+
+    $audit =
+        AuditLog::query()
+            ->where(
+                'entity_id',
+                $document->id
+            )
+            ->where(
+                'action',
+                'DOCUMENT_RECORD_EXPIRED'
+            )
+            ->firstOrFail();
+
+    $this->assertSame(
+        AuditSource::SYSTEM,
+        $audit->source
+    );
+
+    $this->assertNull(
+        $audit->actor_user_id
+    );
+
+    /*
+     * Retry tidak menghasilkan expiry/audit kedua.
+     */
+    $changedAgain =
+        $this->documentService()
+            ->expireIfDue(
+                $document,
+                CarbonImmutable::parse(
+                    '2026-08-25 18:00:00'
+                )
+            );
+
+    $this->assertFalse(
+        $changedAgain
+    );
+
+    $this->assertSame(
+        1,
+        AuditLog::query()
+            ->where(
+                'entity_id',
+                $document->id
+            )
+            ->where(
+                'action',
+                'DOCUMENT_RECORD_EXPIRED'
+            )
+            ->count()
+    );
+
+    /*
+     * EXPIRED tidak boleh diubah kembali menjadi
+     * VALID tanpa metadata revision baru.
+     */
+    try {
+        $this->documentService()
+            ->markValid(
+                $context['operator'],
+                $document
+            );
+
+        $this->fail(
+            'Document EXPIRED berhasil divalidasi '
+            .'ulang tanpa update metadata.'
+        );
+    } catch (
+        ValidationException $exception
+    ) {
+        $this->assertArrayHasKey(
+            'status',
+            $exception->errors()
+        );
+    }
+}
     public function test_draft_pending_and_rejected_logistics_are_not_ready(): void
     {
         foreach (

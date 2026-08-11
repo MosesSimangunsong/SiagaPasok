@@ -30,6 +30,7 @@ use App\Models\SupplyCommitment;
 use App\Models\SupplyNetworkLink;
 use App\Models\Unit;
 use App\Models\User;
+use App\Models\DocumentRecord;
 use App\Services\Notification\DerivedForecastStateObservationService;
 use App\Services\Readiness\DocumentRecordService;
 use App\Services\Readiness\ReadinessChecklistPreparationService;
@@ -152,7 +153,247 @@ protected function tearDown(): void
     }
 
 
-    
+    public function test_document_expiry_notifies_readiness_and_recalculates_rfp_once(): void
+{
+    $context =
+        $this->createReadyContext(
+            'DOCUMENT-EXPIRY'
+        );
+
+    $readyObservation =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->latest('id')
+            ->firstOrFail();
+
+    $this->assertTrue(
+        $readyObservation
+            ->ready_for_procurement
+    );
+
+    $documentChecklist =
+        ReadinessChecklist::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->where(
+                'organization_id',
+                $context['kdkmp']->id
+            )
+            ->where(
+                'readiness_type',
+                ReadinessType::DOCUMENT
+                    ->value
+            )
+            ->where(
+                'is_current_version',
+                true
+            )
+            ->firstOrFail();
+
+    $document =
+        DocumentRecord::query()
+            ->where(
+                'organization_id',
+                $context['kdkmp']->id
+            )
+            ->firstOrFail();
+
+    /*
+     * Adversarial persisted-state case:
+     *
+     * Simulasikan expiry metadata berubah di luar
+     * normal DocumentRecordService tanpa menaikkan
+     * revision counter.
+     *
+     * Ini membuktikan scheduler tetap fail-safe
+     * terhadap persisted state yang sudah time-invalid.
+     */
+    $document->update([
+        'expires_at' =>
+            '2026-08-20 12:00:00',
+    ]);
+
+    $document->refresh();
+
+    $this->assertSame(
+        DocumentStatus::VALID,
+        $document->status
+    );
+
+    Notification::query()->delete();
+
+    CarbonImmutable::setTestNow(
+        CarbonImmutable::parse(
+            '2026-08-20 12:00:01'
+        )
+    );
+
+    $exitCode =
+        Artisan::call(
+            'documents:evaluate-expiry'
+        );
+
+    $this->assertSame(
+        Command::SUCCESS,
+        $exitCode
+    );
+
+    $document->refresh();
+
+    $this->assertSame(
+        DocumentStatus::EXPIRED,
+        $document->status
+    );
+
+    $this->assertSame(
+        1,
+        AuditLog::query()
+            ->where(
+                'entity_id',
+                $document->id
+            )
+            ->where(
+                'action',
+                'DOCUMENT_RECORD_EXPIRED'
+            )
+            ->where(
+                'source',
+                AuditSource::SYSTEM
+                    ->value
+            )
+            ->count()
+    );
+
+    $readinessDedupeKey =
+        'readiness-checklist:'
+        .$documentChecklist->id
+        .':invalidated:document-'
+        .$document->id
+        .'-expired-revision-'
+        .$document->revision_no;
+
+    foreach (
+        [
+            $context['operator'],
+            $context['manager'],
+        ]
+        as $recipient
+    ) {
+        $this->assertDatabaseHas(
+            'notifications',
+            [
+                'recipient_user_id' =>
+                    $recipient->id,
+
+                'notification_type' =>
+                    NotificationType::READINESS
+                        ->value,
+
+                'deduplication_key' =>
+                    $readinessDedupeKey,
+            ]
+        );
+    }
+
+    $latestObservation =
+        ForecastDerivedStateObservation::query()
+            ->where(
+                'forecast_id',
+                $context['forecast']->id
+            )
+            ->latest('id')
+            ->firstOrFail();
+
+    $this->assertFalse(
+        $latestObservation
+            ->ready_for_procurement
+    );
+
+    $this->assertContains(
+        'DOCUMENT_NOT_READY',
+        $latestObservation
+            ->reason_codes
+    );
+
+    $rfpDedupeKey =
+        'derived-observation:'
+        .$latestObservation->id
+        .':rfp-lost';
+
+    $this->assertDatabaseHas(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['sppgUser']->id,
+
+            'notification_type' =>
+                NotificationType::RFP
+                    ->value,
+
+            'deduplication_key' =>
+                $rfpDedupeKey,
+        ]
+    );
+
+    $this->assertDatabaseHas(
+        'notifications',
+        [
+            'recipient_user_id' =>
+                $context['manager']->id,
+
+            'notification_type' =>
+                NotificationType::RFP
+                    ->value,
+
+            'deduplication_key' =>
+                $rfpDedupeKey,
+        ]
+    );
+
+    /*
+     * Second scheduler run is fully idempotent.
+     */
+    $secondExitCode =
+        Artisan::call(
+            'documents:evaluate-expiry'
+        );
+
+    $this->assertSame(
+        Command::SUCCESS,
+        $secondExitCode
+    );
+
+    $this->assertSame(
+        1,
+        AuditLog::query()
+            ->where(
+                'entity_id',
+                $document->id
+            )
+            ->where(
+                'action',
+                'DOCUMENT_RECORD_EXPIRED'
+            )
+            ->count()
+    );
+
+    $this->assertSame(
+        2,
+        Notification::query()
+            ->where(
+                'deduplication_key',
+                $readinessDedupeKey
+            )
+            ->count()
+    );
+}
+
+
     public function test_shortfall_growth_notifies_primary_operator_and_manager(): void
     {
         $context =

@@ -19,18 +19,26 @@ Schedule::command(
     ->withoutOverlapping();
 
 /*
+ * Materialize Document Record time expiry.
+ *
+ * Canonical Document Readiness tetap server-derived
+ * dan tidak bergantung pada scheduler ini.
+ */
+Schedule::command(
+    'documents:evaluate-expiry'
+)
+    ->everyMinute()
+    ->withoutOverlapping();
+
+/*
  * Derived Forecast state safety net.
  *
- * Mutation-driven recalculation tetap menggunakan
- * observeAfterCommit(). Scheduler ini terutama
- * memastikanculation tetap menggunakan
- * observeAfterCommit(). Scheduler ini terutama
- * memastikan transition berbasis waktu seperti
- * required_end_at tidak bergantung pada user membuka
- * halaman tertentu.
+ * Mutation-driven recalculation menggunakan
+ * observeAfterCommit().
  *
- * MVP scale kecil; no Redis/queue infrastructure
- * diperlukan.
+ * Periodic observer terutama menangkap transition
+ * berbasis waktu dan menjadi retry safety net untuk
+ * derived Shortfall/RFP observation.
  */
 Schedule::command(
     'forecasts:observe-derived-state'

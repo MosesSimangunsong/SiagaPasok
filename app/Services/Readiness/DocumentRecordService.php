@@ -20,6 +20,8 @@ use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\ValidationException;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 
 final class DocumentRecordService
 {
@@ -34,6 +36,9 @@ final class DocumentRecordService
 
     private const AUDIT_REVOKED =
         'DOCUMENT_RECORD_REVOKED';
+    
+    private const AUDIT_EXPIRED =
+    'DOCUMENT_RECORD_EXPIRED';
 
     public function __construct(
     private readonly AuditService
@@ -394,6 +399,18 @@ final class DocumentRecordService
                         ),
                     ]);
                 }
+                if (
+    $current->status
+    === DocumentStatus::EXPIRED
+) {
+    throw ValidationException::withMessages([
+        'status' => (
+            'Document Record yang sudah EXPIRED '
+            .'harus diperbarui terlebih dahulu '
+            .'sebelum dapat divalidasi kembali.'
+        ),
+    ]);
+}
 
                 /*
                  * Revalidate persisted metadata.
@@ -569,6 +586,330 @@ $this->observeAffectedForecastsAfterCommit(
         );
     }
 
+
+  public function expireIfDue(
+    DocumentRecord $documentRecord,
+    ?CarbonInterface $evaluatedAt = null,
+): bool {
+    $evaluationTime =
+        $evaluatedAt === null
+            ? CarbonImmutable::now()
+            : CarbonImmutable::instance(
+                $evaluatedAt
+            );
+
+    return DB::transaction(
+        function () use (
+            $documentRecord,
+            $evaluationTime,
+        ): bool {
+            $current =
+                DocumentRecord::query()
+                    ->whereKey(
+                        $documentRecord
+                            ->getKey()
+                    )
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+            /*
+             * Idempotent terminal materialization.
+             */
+            if (
+                $current->status
+                === DocumentStatus::EXPIRED
+            ) {
+                return false;
+            }
+
+            /*
+             * Hanya VALID record yang mengalami
+             * automatic time expiry.
+             *
+             * PENDING/REVOKED tidak perlu diubah
+             * menjadi EXPIRED karena sudah tidak
+             * efektif secara operasional.
+             */
+            if (
+                $current->status
+                !== DocumentStatus::VALID
+            ) {
+                return false;
+            }
+
+            if (
+                $current->expires_at === null
+            ) {
+                return false;
+            }
+
+            $expiresAt =
+                CarbonImmutable::instance(
+                    $current->expires_at
+                );
+
+            /*
+             * Equality masih valid.
+             *
+             * EXPIRED baru materialized ketika
+             * server evaluation time benar-benar
+             * melewati expires_at.
+             */
+            if (
+                ! $evaluationTime->gt(
+                    $expiresAt
+                )
+            ) {
+                return false;
+            }
+
+            /*
+             * Resolve actionable readiness impact
+             * SEBELUM status diubah.
+             *
+             * Canonical M08 time evaluation sudah
+             * dapat melihat document invalid pada
+             * evaluationTime ini meskipun persisted
+             * status masih VALID.
+             */
+            $affectedChecklists =
+                $this
+                    ->resolveOperationalExpiryInvalidations(
+                        $current,
+                        $evaluationTime
+                    );
+
+            $before =
+                $this->snapshot(
+                    $current
+                );
+
+            /*
+             * Expiry bukan payload revision.
+             *
+             * revision_no sengaja TIDAK dinaikkan.
+             * Perubahan metadata berikutnya melalui
+             * update() yang akan membuat revision baru.
+             */
+            $current->status =
+                DocumentStatus::EXPIRED;
+
+            $current->save();
+
+            $reason =
+                'Document Record otomatis EXPIRED '
+                .'karena waktu evaluasi server '
+                .'telah melewati expires_at '
+                .$expiresAt
+                    ->toIso8601String()
+                .'.';
+
+            $this->auditService->record(
+                actor:
+                    null,
+
+                source:
+                    AuditSource::SYSTEM,
+
+                action:
+                    self::AUDIT_EXPIRED,
+
+                entity:
+                    $current,
+
+                previousValue:
+                    $before,
+
+                newValue:
+                    $this->snapshot(
+                        $current
+                    ),
+
+                reasonNote:
+                    $reason,
+            );
+
+            foreach (
+                $affectedChecklists
+                as $checklist
+            ) {
+                $this
+                    ->operationalNotificationService
+                    ->readinessDependencyInvalidated(
+                        checklist:
+                            $checklist,
+
+                        causeKey:
+                            'document-'
+                            .$current->id
+                            .'-expired-revision-'
+                            .$current
+                                ->revision_no,
+
+                        message:
+                            'Document Readiness tidak '
+                            .'lagi valid karena Document '
+                            .'Record yang menjadi evidence '
+                            .'telah kedaluwarsa.',
+                    );
+            }
+
+            /*
+             * Dapat menghasilkan:
+             * - DOCUMENT_NOT_READY;
+             * - RFP TRUE -> FALSE;
+             * - atau no-op bila Forecast terkait
+             *   sudah tidak operational/current.
+             */
+            $this
+                ->observeAffectedForecastsAfterCommit(
+                    $current
+                );
+
+            return true;
+        }
+    );
+}
+
+/**
+ * @return Collection<int, ReadinessChecklist>
+ */
+private function resolveOperationalExpiryInvalidations(
+    DocumentRecord $documentRecord,
+    CarbonImmutable $evaluationTime,
+): Collection {
+    $checklists =
+        ReadinessChecklist::query()
+            ->where(
+                'readiness_type',
+                ReadinessType::DOCUMENT
+                    ->value
+            )
+            ->where(
+                'status',
+                ReadinessApprovalStatus
+                    ::APPROVED
+                    ->value
+            )
+            ->where(
+                'is_current_version',
+                true
+            )
+            ->whereHas(
+                'items',
+                fn ($query) =>
+                    $query->where(
+                        'document_record_id',
+                        $documentRecord->id
+                    )
+            )
+            ->with([
+                'forecast',
+                'items',
+            ])
+            ->orderBy('id')
+            ->get();
+
+    return $checklists
+        ->filter(
+            function (
+                ReadinessChecklist $checklist
+            ) use (
+                $documentRecord,
+                $evaluationTime,
+            ): bool {
+                $forecast =
+                    $checklist->forecast;
+
+                if (
+                    ! $forecast
+                    || ! $forecast->isPublished()
+                ) {
+                    return false;
+                }
+
+                /*
+                 * Setelah Forecast boundary lewat,
+                 * tidak ada lagi readiness recovery
+                 * action yang berguna untuk Forecast
+                 * tersebut.
+                 */
+                if (
+                    $evaluationTime->gt(
+                        CarbonImmutable::instance(
+                            $forecast
+                                ->required_end_at
+                        )
+                    )
+                ) {
+                    return false;
+                }
+
+                if (
+                    $checklist
+                        ->forecast_version
+                    !== $forecast->version
+                ) {
+                    return false;
+                }
+
+                /*
+                 * Pastikan checklist benar-benar
+                 * membekukan revision Document Record
+                 * yang sedang expired.
+                 */
+                $referencesRevision =
+                    $checklist
+                        ->items
+                        ->contains(
+                            fn ($item): bool =>
+                                (int)
+                                $item
+                                    ->document_record_id
+                                === $documentRecord->id
+                                && (int)
+                                $item
+                                    ->document_record_revision_no
+                                === $documentRecord
+                                    ->revision_no
+                        );
+
+                if (! $referencesRevision) {
+                    return false;
+                }
+
+                $readiness =
+                    $this
+                        ->readinessEvaluationService
+                        ->evaluateContributor(
+                            $forecast,
+                            $checklist
+                                ->organization_id,
+                            $evaluationTime
+                        );
+
+                /*
+                 * Hanya current contributor dengan
+                 * actual document validity failure
+                 * yang menerima invalidation action.
+                 *
+                 * Forecast-ended / contributor-lost
+                 * tidak menghasilkan alert tambahan.
+                 */
+                return
+                    $readiness->isContributor
+                    && ! $readiness
+                        ->documentReady
+                    && in_array(
+                        'DOCUMENT_INVALID',
+                        $readiness
+                            ->documentReasonCodes,
+                        true
+                    );
+            }
+        )
+        ->values();
+}
 
     /**
      * @return Collection<int, ReadinessChecklist>
