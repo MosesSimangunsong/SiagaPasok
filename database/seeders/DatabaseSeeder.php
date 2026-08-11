@@ -14,5 +14,16 @@ class DatabaseSeeder extends Seeder
         $this->call([
             BaseReferenceSeeder::class,
         ]);
+
+        if (
+            (bool) config(
+                'siagapasok.demo.enabled',
+                false
+            )
+        ) {
+            $this->call([
+                DemoIdentitySeeder::class,
+            ]);
+        }
     }
 }
