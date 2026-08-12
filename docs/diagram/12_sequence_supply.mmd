@@ -1,0 +1,58 @@
+%% Supply Commitment sequence through actual route/controller/service layers
+sequenceDiagram
+    actor Operator as KDKMP Operator
+    actor Manager as KDKMP Manager
+    participant UI as React/Inertia UI
+    participant Route as routes/web.php + auth/role middleware
+    participant C as CommitmentController / CommitmentVersionController
+    participant A as CommitmentApprovalController
+    participant Policy as Policies
+    participant S as CommitmentWorkflowService
+    participant Metrics as SupplyMetricsService
+    participant Support as AuditService / OperationalNotificationService
+    participant DB as PostgreSQL via Eloquent
+
+    Operator->>UI: Fill Commitment draft form
+    UI->>Route: POST /kdkmp/commitments
+    Route->>C: store()
+    C->>Policy: authorize organization/role/resource
+    Policy-->>C: allowed
+    C->>S: createDraft business command
+    S->>DB: BEGIN; lock/validate required records
+    S->>DB: INSERT supply_commitments
+    S->>DB: INSERT commitment_versions (DRAFT)
+    S->>Support: record audit
+    S->>DB: COMMIT
+    S-->>C: draft commitment + version
+    C-->>UI: Inertia redirect / response
+
+    Operator->>UI: Submit DRAFT version
+    UI->>Route: POST /kdkmp/commitments/{commitment}/versions/{version}/submit
+    Route->>C: CommitmentVersionController::submit()
+    C->>Policy: authorize maker + organization
+    C->>S: submit version command
+    S->>DB: transaction + row locks + revalidation
+    S->>DB: UPDATE version -> PENDING_APPROVAL
+    S->>Support: audit + manager notification
+    S-->>UI: submitted
+
+    Manager->>UI: Open approval queue
+    UI->>Route: POST /kdkmp/manager/approvals/{commitment}/versions/{version}/approve
+    Route->>A: approve()
+    A->>Policy: authorize manager + same organization
+    A->>S: approve version command
+    S->>DB: transaction + row locks
+    S->>S: enforce maker-checker and current-version rules
+    S->>DB: UPDATE version -> APPROVED
+    S->>DB: UPDATE commitment active_version_id / confidence state
+    S->>Support: audit + operator notification
+    S-->>A: approved commitment
+    A-->>UI: redirect / review result
+
+    UI->>Route: GET commitment / forecast / dashboard read surface
+    Route->>C: index() / show() read request
+    C->>Metrics: calculate derived supply metrics
+    Metrics->>DB: read Forecast + valid commitments + accepted fallback allocations
+    Metrics->>Metrics: derive Direct Safe / At-Risk / Coverage / Shortfall
+    Metrics-->>C: read-only derived result
+    C-->>UI: Inertia props with derived metrics

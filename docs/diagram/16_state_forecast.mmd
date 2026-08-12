@@ -1,0 +1,23 @@
+%% DemandForecast.status state machine verified from enum + DemandForecastService
+stateDiagram-v2
+    [*] --> DRAFT : createDraft
+
+    DRAFT --> DRAFT : updateDraft / version++
+    DRAFT --> PUBLISHED : publish / version++
+    DRAFT --> CANCELLED : cancel with reason
+
+    PUBLISHED --> PUBLISHED : revisePublished / version++
+    PUBLISHED --> CLOSED : close
+    PUBLISHED --> CANCELLED : cancel if guard passes
+
+    CLOSED --> [*]
+    CANCELLED --> [*]
+
+    note right of PUBLISHED
+        KDKMP visibility is read-only.
+        Revision can make previous readiness snapshots stale.
+    end note
+
+    note right of CANCELLED
+        CLOSED and CANCELLED are terminal ForecastStatus values.
+    end note

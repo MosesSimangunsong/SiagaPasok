@@ -1,0 +1,50 @@
+%% Supply Commitment has three distinct persisted state dimensions.
+%% Version approval, commitment lifecycle, and current confidence must not be collapsed into one status.
+stateDiagram-v2
+    state "CommitmentVersion.approval_status" as Approval {
+        [*] --> A_DRAFT
+        A_DRAFT --> A_PENDING : Operator submit
+        A_PENDING --> A_APPROVED : Manager approve
+        A_PENDING --> A_REJECTED : Manager reject
+        A_REJECTED --> A_DRAFT : create new immutable revision
+        A_APPROVED --> A_DRAFT : create new immutable revision
+
+        state "DRAFT" as A_DRAFT
+        state "PENDING_APPROVAL" as A_PENDING
+        state "APPROVED" as A_APPROVED
+        state "REJECTED" as A_REJECTED
+    }
+
+    state "SupplyCommitment.lifecycle_status" as Lifecycle {
+        [*] --> L_ACTIVE
+        L_ACTIVE --> L_CANCELLED : explicit cancellation
+        L_ACTIVE --> L_EXPIRED : expiry transition
+        L_CANCELLED --> [*]
+        L_EXPIRED --> [*]
+
+        state "ACTIVE" as L_ACTIVE
+        state "CANCELLED" as L_CANCELLED
+        state "EXPIRED" as L_EXPIRED
+    }
+
+    state "SupplyCommitment.current_confidence" as Confidence {
+        [*] --> C_UNSET
+        C_UNSET --> C_GREEN : initial approved operational confidence
+        C_GREEN --> C_YELLOW : Operator downgrade
+        C_GREEN --> C_RED : Operator/system downgrade
+        C_YELLOW --> C_RED : further downgrade
+        C_YELLOW --> C_GREEN : recovery request approved by Manager
+        C_RED --> [*]
+
+        state "NULL / not initialized" as C_UNSET
+        state "GREEN" as C_GREEN
+        state "YELLOW" as C_YELLOW
+        state "RED" as C_RED
+    }
+
+    note right of Confidence
+        RED is terminal confidence.
+        Only eligible APPROVED + ACTIVE + GREEN supply
+        can contribute to Direct Safe Supply.
+        YELLOW contributes to At-Risk, not Safe Supply.
+    end note

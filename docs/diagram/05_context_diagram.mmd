@@ -1,0 +1,49 @@
+%% SiagaPasok system context
+%% The official procurement process is outside the application; no software integration is repository-verified.
+flowchart LR
+    admin["System Admin"]
+    sppg["SPPG User"]
+    operator["KDKMP Operator / FRPL"]
+    manager["KDKMP Manager"]
+    procurement["Official procurement process<br/>outside SiagaPasok<br/>no repository-verified software integration"]
+
+    subgraph siagapasok["SiagaPasok - Pre-Procurement Supply Orchestration"]
+        identity["Closed-account identity and organization boundary"]
+        forecast["Demand Forecast"]
+        supply["Producer / Harvest / Commitment / Confidence"]
+        derived["Derived Safe Supply / At-Risk / Shortfall / Coverage"]
+        fallback["Fallback Request / Offer / Reservation / Acceptance"]
+        readiness["Logistics + Document Readiness"]
+        rfp["Derived Ready for Procurement"]
+        feedback["Fulfilment Feedback"]
+        support["Notifications + Audit Trail"]
+    end
+
+    admin -->|"organizations, users, master data, network"| identity
+    sppg -->|"forecast demand"| forecast
+    sppg <-->|"aggregate supply and readiness visibility"| derived
+    sppg <-->|"RFP status"| rfp
+    sppg -->|"manual post-process feedback"| feedback
+
+    operator -->|"producer, harvest, maker-side supply and readiness actions"| supply
+    operator -->|"fallback maker actions"| fallback
+    operator -->|"readiness maker actions"| readiness
+
+    manager -->|"commitment/recovery approval"| supply
+    manager -->|"fallback decisions"| fallback
+    manager -->|"readiness approval"| readiness
+
+    forecast --> supply
+    supply --> derived
+    derived --> fallback
+    fallback --> derived
+    derived --> readiness
+    readiness --> rfp
+    rfp -. "handoff only" .-> procurement
+    procurement -. "result later recorded manually" .-> feedback
+
+    identity --> support
+    forecast --> support
+    supply --> support
+    fallback --> support
+    readiness --> support

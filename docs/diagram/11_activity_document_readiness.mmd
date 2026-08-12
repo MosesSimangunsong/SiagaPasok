@@ -1,0 +1,44 @@
+%% Implemented Document Record + DOCUMENT Readiness workflow
+flowchart TD
+    start([Start])
+    operator["KDKMP Operator"]
+    doc_create["Create DocumentRecord<br/>status = PENDING; revision_no = 1"]
+    doc_update["Update document metadata<br/>revision_no increments; status returns to PENDING"]
+    doc_validate["Mark document VALID"]
+    doc_terminal{"Later document transition?"}
+    revoked["Document = REVOKED"]
+    expired["Document = EXPIRED when due"]
+
+    prepare["Prepare DOCUMENT readiness checklist"]
+    guard{"Forecast PUBLISHED + org is current effective contributor?"}
+    draft["Checklist DRAFT<br/>snapshot forecast_version<br/>resolve DOCUMENT requirements"]
+    item["Satisfy items; organization-scoped requirement may reference DocumentRecord"]
+    submit["Submit checklist"]
+    validate_submit{"All required items satisfied AND referenced documents valid?"}
+    freeze["Freeze document_record_revision_no on submitted items"]
+    pending["Checklist = PENDING_APPROVAL"]
+    manager["KDKMP Manager reviews"]
+    decision{"Approve?"}
+    approved["Checklist = APPROVED"]
+    rejected["Checklist = REJECTED"]
+    evaluate["ReadinessEvaluationService validates current Forecast version<br/>and frozen document revision/status"]
+    ready["Contributor Document Ready TRUE/FALSE"]
+    revision["Operator creates new readiness revision DRAFT"]
+    finish([End])
+
+    start --> operator --> doc_create --> doc_validate --> prepare --> guard
+    doc_create --> doc_update --> doc_validate
+    doc_validate -. "later content update" .-> doc_update
+    doc_validate -.-> doc_terminal
+    doc_terminal -- Revoke --> revoked --> evaluate
+    doc_terminal -- Expire when due --> expired --> evaluate
+
+    guard -- No --> finish
+    guard -- Yes --> draft --> item --> submit --> validate_submit
+    validate_submit -- No --> item
+    validate_submit -- Yes --> freeze --> pending --> manager --> decision
+    decision -- Approve --> approved --> evaluate --> ready --> finish
+    decision -- Reject --> rejected --> revision --> item
+
+    doc_update -. "old frozen document revision becomes stale" .-> evaluate
+    evaluate -. "stale / invalid" .-> revision

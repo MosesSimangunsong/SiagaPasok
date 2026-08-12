@@ -1,0 +1,55 @@
+%% Fallback Request and Fallback Offer are separate state machines.
+stateDiagram-v2
+    state "FallbackRequest.status" as Request {
+        [*] --> R_DRAFT
+        R_DRAFT --> R_PENDING : Operator submit
+        R_PENDING --> R_OPEN : Requester Manager approve/broadcast
+        R_PENDING --> R_REJECTED : Requester Manager reject
+        R_DRAFT --> R_CANCELLED : Requester Manager cancel
+        R_OPEN --> R_CANCELLED : Requester Manager cancel
+        R_OPEN --> R_EXPIRED : evaluated after response deadline
+        R_OPEN --> R_FULFILLED : accepted volume reaches requested volume
+
+        R_REJECTED --> [*]
+        R_FULFILLED --> [*]
+        R_EXPIRED --> [*]
+        R_CANCELLED --> [*]
+
+        state "DRAFT" as R_DRAFT
+        state "PENDING_APPROVAL" as R_PENDING
+        state "OPEN" as R_OPEN
+        state "REJECTED" as R_REJECTED
+        state "FULFILLED" as R_FULFILLED
+        state "EXPIRED" as R_EXPIRED
+        state "CANCELLED" as R_CANCELLED
+    }
+
+    state "FallbackOffer.status" as Offer {
+        [*] --> O_DRAFT
+        O_DRAFT --> O_PENDING : Supplier Operator submit
+        O_PENDING --> O_AVAILABLE : Supplier Manager approve + source reserve succeeds
+        O_PENDING --> O_REJECTED : Supplier Manager reject
+        O_AVAILABLE --> O_ACCEPTED : Requester Manager accept
+        O_AVAILABLE --> O_REJECTED : Requester Manager reject or parent Request cancel
+        O_AVAILABLE --> O_WITHDRAWN : Supplier Manager withdraw
+        O_AVAILABLE --> O_EXPIRED : expiry / parent Request expiry
+
+        O_ACCEPTED --> [*]
+        O_REJECTED --> [*]
+        O_WITHDRAWN --> [*]
+        O_EXPIRED --> [*]
+
+        state "DRAFT" as O_DRAFT
+        state "PENDING_APPROVAL" as O_PENDING
+        state "AVAILABLE" as O_AVAILABLE
+        state "ACCEPTED" as O_ACCEPTED
+        state "REJECTED" as O_REJECTED
+        state "WITHDRAWN" as O_WITHDRAWN
+        state "EXPIRED" as O_EXPIRED
+    }
+
+    note right of Offer
+        AVAILABLE means capacity is reserved,
+        but it is not yet Fallback Safe Supply.
+        Only ACCEPTED volume with still-valid source supply counts.
+    end note

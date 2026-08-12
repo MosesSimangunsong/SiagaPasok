@@ -1,0 +1,47 @@
+%% Implemented supply planning and commitment workflow
+flowchart TD
+    start([Start])
+    operator["KDKMP Operator"]
+    producer["Create/update organization-scoped Producer"]
+    harvest["Create/update Expected Harvest"]
+    note_harvest["Expected Harvest is planning context only; it is not Safe Supply"]
+    draft["Create SupplyCommitment + CommitmentVersion DRAFT"]
+    edit["Update DRAFT version payload"]
+    submit["Submit version"]
+    validate_submit{"Role/org/forecast/producer/version valid?"}
+    pending["Version = PENDING_APPROVAL"]
+    manager["KDKMP Manager reviews pending version"]
+    approve{"Approve?"}
+    rejected["Version = REJECTED"]
+    approved["Version = APPROVED<br/>active_version_id points to approved version"]
+    confidence["Current confidence eligible for monitoring<br/>GREEN / YELLOW / RED"]
+    metrics["SupplyMetricsService recalculates derived supply"]
+    safe{"Approved + ACTIVE + GREEN + valid window + PRIMARY?"}
+    direct_safe["Include approved minimum volume in Direct Safe Supply"]
+    not_safe["Exclude from Direct Safe Supply"]
+    yellow{"Confidence = YELLOW?"}
+    at_risk["Include approved minimum volume in At-Risk Supply"]
+    risk_action["Operator may downgrade GREEN to YELLOW/RED"]
+    recovery["For YELLOW: Operator creates recovery request"]
+    recovery_review["Different KDKMP Manager approves/rejects recovery"]
+    recover_green["If approved, confidence returns to GREEN"]
+    terminal_red["RED remains terminal confidence"]
+    finish([Derived supply state returned to UI])
+
+    start --> operator --> producer --> harvest --> note_harvest --> draft --> edit --> submit
+    submit --> validate_submit
+    validate_submit -- No --> edit
+    validate_submit -- Yes --> pending --> manager --> approve
+    approve -- Reject --> rejected --> draft
+    approve -- Approve --> approved --> confidence --> metrics --> safe
+    safe -- Yes --> direct_safe --> finish
+    safe -- No --> not_safe --> yellow
+    yellow -- Yes --> at_risk --> finish
+    yellow -- No --> finish
+
+    approved -. "monitoring event" .-> risk_action
+    risk_action --> confidence
+    confidence -. "YELLOW" .-> recovery --> recovery_review
+    recovery_review -. "approved" .-> recover_green --> confidence
+    recovery_review -. "rejected" .-> finish
+    confidence -. "RED" .-> terminal_red --> finish

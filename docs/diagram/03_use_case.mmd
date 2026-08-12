@@ -1,0 +1,104 @@
+%% SiagaPasok implemented use-case map
+%% Evidence basis: routes/web.php, middleware, policies, controllers, Inertia pages.
+flowchart LR
+    admin["System Admin"]
+    sppg["SPPG User"]
+    operator["KDKMP Operator / FRPL"]
+    manager["KDKMP Manager"]
+
+    subgraph system["SiagaPasok"]
+        auth(["Login / Logout"])
+        notifications(["View notifications and mark as read"])
+
+        admin_org(["Manage organizations"])
+        admin_users(["Manage closed user accounts"])
+        admin_master(["Manage units and commodities"])
+        admin_network(["Configure SPPG-KDKMP supply network"])
+
+        forecast(["Create, edit, publish, revise, cancel, close Forecast"])
+        forecast_view(["View published Forecast"])
+        metrics(["View derived Safe Supply, At-Risk, Coverage, Shortfall"])
+        rfp(["View derived Ready for Procurement"])
+        fulfilment_write(["Record Fulfilment Feedback"])
+        fulfilment_view(["View Fulfilment Feedback"])
+
+        producer(["Manage organization-scoped Producer Registry"])
+        harvest(["Manage Expected Harvest"])
+        commitment(["Create/update/submit Supply Commitment version"])
+        confidence(["Downgrade supply confidence"])
+        recovery_request(["Request confidence recovery"])
+
+        commitment_review(["Approve/reject Commitment version"])
+        recovery_review(["Approve/reject confidence recovery"])
+        commitment_cancel(["Cancel approved Commitment"])
+
+        fallback_request(["Prepare/submit Fallback Request"])
+        fallback_request_review(["Approve/broadcast or reject Fallback Request"])
+        fallback_request_cancel(["Cancel DRAFT/OPEN Fallback Request"])
+        fallback_network(["View OPEN fallback network requests"])
+        fallback_offer(["Create/submit source-backed Fallback Offer"])
+        fallback_offer_review(["Approve/reject/withdraw outgoing Offer"])
+        fallback_incoming(["Accept/reject incoming AVAILABLE Offer"])
+
+        document(["Create/update/validate/revoke Document Record"])
+        readiness_make(["Prepare/update/submit/revise Readiness Checklist"])
+        readiness_review(["Approve/reject Readiness Checklist"])
+        contributor_readiness(["View contributor readiness"])
+
+        demo(["Use guarded Demo Controls when Demo Mode is enabled"])
+    end
+
+    admin --> auth
+    sppg --> auth
+    operator --> auth
+    manager --> auth
+
+    admin --> notifications
+    sppg --> notifications
+    operator --> notifications
+    manager --> notifications
+
+    admin --> admin_org
+    admin --> admin_users
+    admin --> admin_master
+    admin --> admin_network
+
+    sppg --> forecast
+    sppg --> metrics
+    sppg --> rfp
+    sppg --> fulfilment_write
+    sppg --> fulfilment_view
+
+    operator --> forecast_view
+    manager --> forecast_view
+    operator --> producer
+    operator --> harvest
+    operator --> commitment
+    operator --> confidence
+    operator --> recovery_request
+
+    manager --> commitment_review
+    manager --> recovery_review
+    manager --> commitment_cancel
+
+    operator --> fallback_request
+    manager --> fallback_request_review
+    manager --> fallback_request_cancel
+    operator --> fallback_network
+    manager --> fallback_network
+    operator --> fallback_offer
+    manager --> fallback_offer_review
+    manager --> fallback_incoming
+
+    operator --> document
+    operator --> readiness_make
+    operator --> contributor_readiness
+    manager --> readiness_review
+    manager --> contributor_readiness
+
+    operator --> fulfilment_view
+    manager --> fulfilment_view
+
+    sppg -. "demo-only seeded account" .-> demo
+    operator -. "demo-only seeded account" .-> demo
+    manager -. "demo-only seeded account" .-> demo

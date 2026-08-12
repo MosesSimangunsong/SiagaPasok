@@ -1,0 +1,54 @@
+%% Implemented authorization and organization boundary
+flowchart TB
+    admin["SYSTEM_ADMIN"]
+    sppg["SPPG_USER"]
+    operator["KDKMP_OPERATOR"]
+    manager["KDKMP_MANAGER"]
+
+    login["Authenticated session"]
+    active["EnsureActiveAccount"]
+    role["EnsureRole route middleware"]
+    demo_guard["EnsureDemoMode<br/>demo routes only"]
+    policies["Resource Policies"]
+    org_scope["Organization / ownership checks<br/>in policies, controllers, services, queries"]
+    maker_checker["Maker-checker service guards"]
+
+    admin_surface["Admin surface<br/>Organizations, Users, Units, Commodities, Supply Network"]
+    sppg_surface["SPPG surface<br/>Forecast commands, aggregate readiness/RFP, Fulfilment Feedback"]
+    op_surface["KDKMP Operator surface<br/>Producer, Harvest, Commitment maker actions,<br/>confidence downgrade/recovery request,<br/>Fallback maker actions, Documents, Readiness maker actions"]
+    mgr_surface["KDKMP Manager surface<br/>Commitment/recovery review,<br/>Fallback request/offer decisions,<br/>Readiness approval, approved Commitment cancellation"]
+    shared["Shared authenticated surface<br/>role landing + recipient-scoped Notifications"]
+    demo["Guarded demo endpoints<br/>real seeded account identity; no arbitrary role/org mutation"]
+
+    admin --> login
+    sppg --> login
+    operator --> login
+    manager --> login
+
+    login --> active --> role
+    role --> shared
+
+    role -->|"SYSTEM_ADMIN"| admin_surface
+    role -->|"SPPG_USER"| sppg_surface
+    role -->|"KDKMP_OPERATOR"| op_surface
+    role -->|"KDKMP_MANAGER"| mgr_surface
+
+    admin_surface --> policies --> org_scope
+    sppg_surface --> policies
+    op_surface --> policies
+    mgr_surface --> policies
+    policies --> org_scope
+
+    op_surface --> maker_checker
+    mgr_surface --> maker_checker
+
+    role -. "demo + matching role" .-> demo_guard --> demo
+    demo --> org_scope
+
+    deny_admin["Boundary: System Admin has administrative authority only;<br/>no operational supply/RFP override"]
+    deny_cross["Boundary: KDKMP private producer/source data remains organization-scoped;<br/>requester sees only allowed aggregate fallback information"]
+    deny_sppg["Boundary: SPPG does not receive KDKMP producer-private operational detail"]
+
+    admin_surface --- deny_admin
+    org_scope --- deny_cross
+    sppg_surface --- deny_sppg

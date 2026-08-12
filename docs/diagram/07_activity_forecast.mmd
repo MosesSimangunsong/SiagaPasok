@@ -1,0 +1,37 @@
+%% Implemented SPPG Demand Forecast lifecycle
+flowchart TD
+    start([Start])
+    sppg["SPPG User"]
+    create["Create Forecast"]
+    draft["Status = DRAFT"]
+    edit["Edit DRAFT<br/>optimistic version check; version increments"]
+    publish["Request Publish"]
+    publish_guard{"DRAFT + valid actor/org + active PRIMARY relationship?"}
+    published["Status = PUBLISHED<br/>published_at set; version increments"]
+    visible["KDKMP can view Forecast read-only"]
+    observe["Derived forecast state observation scheduled after commit"]
+    next{"Next SPPG action"}
+    revise["Revise PUBLISHED Forecast<br/>lock row + version check + reason"]
+    invalidate["Forecast version increments;<br/>stale approved readiness may be invalidated"]
+    cancel["Request cancellation with reason"]
+    cancel_guard{"Accepted fallback allocation exists?"}
+    cancel_block["Cancellation rejected"]
+    cancelled["Status = CANCELLED<br/>terminal"]
+    close["Close PUBLISHED Forecast"]
+    closed["Status = CLOSED<br/>terminal"]
+    finish([End])
+
+    start --> sppg --> create --> draft
+    draft --> edit --> draft
+    draft --> publish --> publish_guard
+    publish_guard -- No --> draft
+    publish_guard -- Yes --> published --> visible --> observe --> next
+
+    next -- Revise --> revise --> invalidate --> published
+    next -- Cancel --> cancel --> cancel_guard
+    cancel_guard -- Yes --> cancel_block --> published
+    cancel_guard -- No --> cancelled --> finish
+    next -- Close --> close --> closed --> finish
+    next -- Continue operating --> published
+
+    draft -. "cancel with reason" .-> cancelled

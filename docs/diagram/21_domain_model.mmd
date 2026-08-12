@@ -1,0 +1,88 @@
+%% Implemented business-domain model.
+%% Nodes tagged DERIVED are service-calculated concepts, not source-of-truth database entities.
+flowchart LR
+    organization["IMPLEMENTED ENTITY<br/>Organization"]
+    network["IMPLEMENTED ENTITY<br/>SupplyNetworkLink<br/>PRIMARY / NETWORK"]
+    user["IMPLEMENTED ENTITY<br/>User"]
+    commodity["IMPLEMENTED ENTITY<br/>Commodity"]
+    unit["IMPLEMENTED ENTITY<br/>Unit"]
+
+    forecast["IMPLEMENTED ENTITY<br/>DemandForecast"]
+    producer["IMPLEMENTED ENTITY<br/>Producer"]
+    harvest["IMPLEMENTED ENTITY<br/>ExpectedHarvest"]
+    commitment["IMPLEMENTED ENTITY<br/>SupplyCommitment"]
+    version["IMPLEMENTED ENTITY<br/>CommitmentVersion"]
+    confidence_event["IMPLEMENTED ENTITY<br/>CommitmentConfidenceEvent"]
+    recovery["IMPLEMENTED ENTITY<br/>ConfidenceRecoveryRequest"]
+
+    fallback_request["IMPLEMENTED ENTITY<br/>FallbackRequest"]
+    fallback_offer["IMPLEMENTED ENTITY<br/>FallbackOffer"]
+    fallback_source["IMPLEMENTED ENTITY<br/>FallbackOfferSource"]
+
+    requirement["IMPLEMENTED ENTITY<br/>ReadinessRequirement"]
+    checklist["IMPLEMENTED ENTITY<br/>ReadinessChecklist"]
+    item["IMPLEMENTED ENTITY<br/>ReadinessItem"]
+    document["IMPLEMENTED ENTITY<br/>DocumentRecord"]
+
+    feedback["IMPLEMENTED ENTITY<br/>FulfilmentFeedback"]
+    notification["IMPLEMENTED ENTITY<br/>Notification"]
+    audit["IMPLEMENTED ENTITY<br/>AuditLog"]
+    observation["IMPLEMENTED ENTITY<br/>ForecastDerivedStateObservation"]
+
+    direct_safe["DERIVED<br/>Direct Safe Supply"]
+    at_risk["DERIVED<br/>At-Risk Supply"]
+    fallback_safe["DERIVED<br/>Fallback Safe Supply"]
+    total_safe["DERIVED<br/>Total Safe Supply"]
+    shortfall["DERIVED<br/>Shortfall / Coverage / Volume Ready"]
+    contributor["DERIVED<br/>Effective Contributor Organizations"]
+    rfp["DERIVED<br/>Ready for Procurement"]
+
+    organization --> user
+    organization --> network
+    commodity --> forecast
+    unit --> forecast
+    organization --> forecast
+
+    organization --> producer
+    producer --> harvest
+    commodity --> harvest
+    unit --> harvest
+
+    forecast --> commitment
+    producer --> commitment
+    harvest -. "optional planning reference" .-> commitment
+    commitment --> version
+    commitment --> confidence_event
+    commitment --> recovery
+
+    forecast --> fallback_request
+    fallback_request --> fallback_offer
+    fallback_offer --> fallback_source
+    fallback_source --> commitment
+
+    forecast --> checklist
+    organization --> checklist
+    requirement --> item
+    checklist --> item
+    requirement --> document
+    document -. "evidence when required" .-> item
+
+    commitment --> direct_safe
+    commitment --> at_risk
+    fallback_offer --> fallback_safe
+    fallback_source --> fallback_safe
+    direct_safe --> total_safe
+    fallback_safe --> total_safe
+    total_safe --> shortfall
+    total_safe --> contributor
+    checklist --> rfp
+    shortfall --> rfp
+    contributor --> rfp
+
+    forecast --> observation
+    rfp --> observation
+    forecast --> feedback
+    contributor --> feedback
+
+    user --> notification
+    user --> audit

@@ -1,0 +1,83 @@
+%% Source-backed Fallback sequence
+sequenceDiagram
+    actor RequesterOp as Requester KDKMP Operator
+    actor RequesterMgr as Requester KDKMP Manager
+    actor SupplierOp as NETWORK KDKMP Operator
+    actor SupplierMgr as NETWORK KDKMP Manager
+    participant UI as React/Inertia UI
+    participant Route as routes/web.php + role middleware
+    participant ReqC as FallbackRequestController / Action / Approval
+    participant OfferC as FallbackOfferController / Action / Review / Incoming
+    participant ReqS as FallbackRequestService
+    participant OfferS as FallbackOfferService
+    participant Reserve as FallbackReservationService
+    participant Metrics as SupplyMetricsService
+    participant Support as Audit / OperationalNotification
+    participant DB as PostgreSQL
+
+    RequesterOp->>UI: Create Fallback Request from current Shortfall
+    UI->>Route: POST /kdkmp/fallback-requests
+    Route->>ReqC: store()
+    ReqC->>ReqS: createDraft request command
+    ReqS->>DB: transaction + lock Forecast
+    ReqS->>Metrics: calculate current Shortfall
+    Metrics->>DB: read canonical supply state
+    ReqS->>DB: INSERT fallback_requests (DRAFT)
+    ReqS->>Support: audit
+
+    RequesterOp->>UI: Submit Request
+    UI->>Route: POST /kdkmp/fallback-requests/{request}/submit
+    Route->>ReqC: FallbackRequestActionController::submit()
+    ReqC->>ReqS: submit request command
+    ReqS->>DB: lock Request + Forecast; revalidate Shortfall/deadline
+    ReqS->>DB: UPDATE Request -> PENDING_APPROVAL
+    ReqS->>Support: notify requester Manager
+
+    RequesterMgr->>UI: Approve broadcast
+    UI->>Route: POST /kdkmp/manager/fallback-requests/{request}/approve
+    Route->>ReqC: FallbackRequestApprovalController::approve()
+    ReqC->>ReqS: approveBroadcast command
+    ReqS->>DB: lock Request + Forecast; maker-checker + revalidation
+    ReqS->>DB: UPDATE Request -> OPEN
+    ReqS->>Support: notify eligible NETWORK organizations after commit
+
+    SupplierOp->>UI: Open Fallback Network and prepare source-backed Offer
+    UI->>Route: POST /kdkmp/fallback-network/{request}/offers
+    Route->>OfferC: FallbackOfferController::store()
+    OfferC->>OfferS: createDraft source-backed offer command
+    OfferS->>DB: validate supplier NETWORK membership and source commitments
+    OfferS->>DB: INSERT fallback_offers + fallback_offer_sources (DRAFT)
+
+    SupplierOp->>UI: Submit Offer
+    UI->>Route: POST /kdkmp/fallback-offers/{offer}/submit
+    Route->>OfferC: FallbackOfferActionController::submit()
+    OfferC->>OfferS: submit offer command
+    OfferS->>DB: UPDATE Offer -> PENDING_APPROVAL
+
+    SupplierMgr->>UI: Approve outgoing Offer
+    UI->>Route: POST /kdkmp/manager/outgoing-offers/{offer}/approve
+    Route->>OfferC: FallbackOfferReviewController::approve()
+    OfferC->>OfferS: approveForAvailability command
+    OfferS->>DB: lock Offer + Request + source commitments
+    OfferS->>Reserve: reserve eligible source capacity
+    Reserve->>DB: UPDATE fallback_offer_sources reserved_volume atomically
+    Reserve-->>OfferS: reservation successful
+    OfferS->>DB: UPDATE Offer -> AVAILABLE
+    OfferS->>Support: notify requester Manager
+
+    RequesterMgr->>UI: Accept available Offer
+    UI->>Route: POST /kdkmp/manager/incoming-offers/{offer}/accept
+    Route->>OfferC: IncomingFallbackOfferController::accept()
+    OfferC->>OfferS: accept command
+    OfferS->>DB: lock Offer + Request + source commitments
+    OfferS->>Metrics: calculate request remaining volume / current source validity
+    OfferS->>Reserve: allocate accepted volume; release unused reserve
+    Reserve->>DB: UPDATE allocated_volume + released_volume
+    OfferS->>DB: UPDATE Offer -> ACCEPTED
+    OfferS->>DB: UPDATE Request -> FULFILLED when requested volume is met
+    OfferS->>Support: audit + notifications + derived observation
+
+    OfferS->>Metrics: recalculate canonical supply state after acceptance
+    Metrics->>DB: include only ACCEPTED fallback volume whose source remains valid
+    Metrics-->>OfferS: updated Safe Supply / Shortfall / contributors
+    OfferS-->>UI: redirect / response; subsequent Inertia reads use recalculated state

@@ -1,0 +1,32 @@
+%% Implemented Logistics Readiness maker-checker workflow
+flowchart TD
+    start([Start])
+    operator["KDKMP Operator"]
+    prepare["Prepare LOGISTICS checklist for Forecast"]
+    guard{"Forecast PUBLISHED + actor org active KDKMP<br/>+ org is current effective contributor<br/>+ no existing initial checklist?"}
+    draft["Create current checklist DRAFT V1<br/>snapshot forecast_version<br/>resolve active LOGISTICS requirements"]
+    items["Operator updates checklist items"]
+    satisfied{"All required items satisfied?"}
+    submit["Submit checklist"]
+    revalidate{"Forecast still PUBLISHED?<br/>forecast_version still current?<br/>organization still effective contributor?"}
+    pending["Checklist = PENDING_APPROVAL"]
+    manager["KDKMP Manager performs read-only review"]
+    review{"Approve?"}
+    approved["Checklist = APPROVED"]
+    rejected["Checklist = REJECTED with review reason"]
+    revision["Operator creates immutable revision<br/>new DRAFT version supersedes prior checklist"]
+    eval["ReadinessEvaluationService checks current approved checklist validity"]
+    result["Contributor Logistics Ready TRUE/FALSE"]
+    finish([End])
+
+    start --> operator --> prepare --> guard
+    guard -- No --> finish
+    guard -- Yes --> draft --> items --> satisfied
+    satisfied -- No --> items
+    satisfied -- Yes --> submit --> revalidate
+    revalidate -- No --> revision
+    revalidate -- Yes --> pending --> manager --> review
+    review -- Approve --> approved --> eval --> result --> finish
+    review -- Reject --> rejected --> revision --> items
+
+    approved -. "Forecast revision or new readiness revision makes old snapshot stale" .-> revision

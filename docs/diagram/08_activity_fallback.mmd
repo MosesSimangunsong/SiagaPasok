@@ -1,0 +1,54 @@
+%% Implemented source-backed Fallback workflow
+flowchart TD
+    start([Start: derived Shortfall > 0])
+    op_req["Requester KDKMP Operator creates Fallback Request DRAFT"]
+    validate_draft{"Forecast PUBLISHED, requester eligible, deadline valid,<br/>requested volume <= current Shortfall?"}
+    submit["Operator submits Request"]
+    revalidate{"Re-read current Forecast and Shortfall"}
+    pending["Request = PENDING_APPROVAL"]
+    mgr_req["Requester KDKMP Manager reviews"]
+    approve_req{"Approve broadcast?"}
+    request_rejected["Request = REJECTED"]
+    open["Request = OPEN<br/>network notification after commit"]
+
+    supplier_op["NETWORK KDKMP Operator sees aggregate OPEN request"]
+    offer_draft["Create source-backed Fallback Offer DRAFT"]
+    offer_submit["Submit Offer"]
+    offer_pending["Offer = PENDING_APPROVAL"]
+    supplier_mgr["Supplier KDKMP Manager reviews Offer"]
+    approve_offer{"Approve Offer?"}
+    supplier_reject["Offer = REJECTED"]
+    reserve["FallbackReservationService locks source capacity<br/>and reserves offered volume atomically"]
+    reserve_ok{"Eligible GREEN source capacity sufficient?"}
+    available["Offer = AVAILABLE<br/>reserved capacity exists"]
+
+    requester_mgr["Requester KDKMP Manager reviews AVAILABLE Offer"]
+    decision{"Accept or reject?"}
+    requester_reject["Offer = REJECTED<br/>release open reserve"]
+    accept["Accept volume up to request remaining volume"]
+    allocate["Allocate accepted volume<br/>release unused reserve"]
+    accepted["Offer = ACCEPTED"]
+    request_done{"Total accepted volume >= requested volume?"}
+    fulfilled["Request = FULFILLED"]
+    still_open["Request remains OPEN"]
+    metrics["SupplyMetricsService recalculates<br/>Fallback Safe Supply only from ACCEPTED valid sources"]
+    finish([End])
+
+    start --> op_req --> validate_draft
+    validate_draft -- No --> op_req
+    validate_draft -- Yes --> submit --> revalidate
+    revalidate -- Invalid --> op_req
+    revalidate -- Valid --> pending --> mgr_req --> approve_req
+    approve_req -- Reject --> request_rejected --> finish
+    approve_req -- Approve --> open --> supplier_op --> offer_draft --> offer_submit --> offer_pending --> supplier_mgr --> approve_offer
+    approve_offer -- Reject --> supplier_reject --> finish
+    approve_offer -- Approve --> reserve --> reserve_ok
+    reserve_ok -- No --> offer_pending
+    reserve_ok -- Yes --> available --> requester_mgr --> decision
+    decision -- Reject --> requester_reject --> metrics --> finish
+    decision -- Accept --> accept --> allocate --> accepted --> request_done
+    request_done -- Yes --> fulfilled --> metrics --> finish
+    request_done -- No --> still_open --> metrics --> finish
+
+    open -. "Manager cancel: release AVAILABLE reserves" .-> finish
+    open -. "after response deadline: expire Request and AVAILABLE Offers" .-> finish

@@ -1,0 +1,134 @@
+%% SiagaPasok physical database schema map
+%% Evidence basis: database/migrations. Only physical FKs are drawn.
+%% Generic entity_type/entity_id fields in audit_logs and notifications are NOT physical FKs.
+flowchart TB
+    subgraph framework["Laravel infrastructure tables"]
+        users["users<br/>PK id<br/>UK email<br/>organization_id FK nullable<br/>name, password, role, is_active, last_login_at<br/>IDX role; is_active; organization_id + role"]
+        password_reset_tokens["password_reset_tokens<br/>PK email<br/>token, created_at"]
+        sessions["sessions<br/>PK id<br/>user_id nullable and indexed, NO FK<br/>ip_address, user_agent, payload, last_activity<br/>IDX last_activity"]
+        cache["cache<br/>PK key<br/>value, expiration<br/>IDX expiration"]
+        cache_locks["cache_locks<br/>PK key<br/>owner, expiration<br/>IDX expiration"]
+        jobs["jobs<br/>PK id<br/>queue, payload, attempts, reserved_at, available_at, created_at<br/>IDX queue"]
+        job_batches["job_batches<br/>PK id<br/>name, total_jobs, pending_jobs, failed_jobs<br/>failed_job_ids, options, cancelled_at, created_at, finished_at"]
+        failed_jobs["failed_jobs<br/>PK id<br/>UK uuid<br/>connection, queue, payload, exception, failed_at<br/>IDX connection + queue + failed_at"]
+    end
+
+    subgraph identity_master["Identity, master data, and supply network"]
+        organizations["organizations<br/>PK id<br/>UK code<br/>name, organization_type, is_active, general_location<br/>IDX organization_type; is_active"]
+        units["units<br/>PK id<br/>UK code<br/>name, symbol, decimal_precision, is_active<br/>IDX is_active"]
+        commodities["commodities<br/>PK id<br/>UK code<br/>default_unit_id FK<br/>name, harvest_behavior, notes, is_active<br/>IDX default_unit_id; is_active"]
+        supply_network_links["supply_network_links<br/>PK id<br/>sppg_organization_id FK<br/>kdkmp_organization_id FK<br/>network_role, is_active, configured_by FK<br/>UK sppg_organization_id + kdkmp_organization_id<br/>IDX sppg + active + role; kdkmp + active"]
+    end
+
+    subgraph forecast_supply["Forecast and supply"]
+        demand_forecasts["demand_forecasts<br/>PK id<br/>UK forecast_code<br/>sppg_organization_id FK; commodity_id FK; unit_id FK<br/>target_volume, required_start_at, required_end_at<br/>freshness_interval_hours, status, notes, version<br/>published_at, closed_at, cancelled_at, cancellation_reason<br/>created_by FK; updated_by FK<br/>IDX SPPG/status/time and commodity/time scopes"]
+        producers["producers<br/>PK id<br/>organization_id FK; created_by FK<br/>producer_code, name, village, district, contact_phone, notes, is_active<br/>UK organization_id + producer_code<br/>IDX organization_id + is_active"]
+        expected_harvests["expected_harvests<br/>PK id<br/>organization_id FK; producer_id FK; commodity_id FK; unit_id FK<br/>expected_min_volume, expected_max_volume<br/>harvest_start_at, harvest_end_at, notes, last_updated_by FK<br/>IDX organization/commodity/time and producer/time scopes"]
+        supply_commitments["supply_commitments<br/>PK id<br/>forecast_id FK; organization_id FK; producer_id FK<br/>expected_harvest_id FK nullable; commodity_id FK<br/>active_version_id FK nullable<br/>lifecycle_status, current_confidence, last_confidence_verified_at<br/>created_by FK; cancelled_at, cancellation_reason, expired_at<br/>IDX forecast/org/lifecycle and confidence scopes"]
+        commitment_versions["commitment_versions<br/>PK id<br/>commitment_id FK; unit_id FK<br/>version_no, min_volume, max_volume<br/>availability_start_at, availability_end_at, notes<br/>approval_status, change_reason, operator_justification<br/>created_by FK; submitted_by FK nullable; reviewed_by FK nullable<br/>submitted_at, reviewed_at, review_reason, approved_at, created_at<br/>UK commitment_id + version_no<br/>IDX commitment + approval/status"]
+        commitment_confidence_events["commitment_confidence_events<br/>PK id<br/>commitment_id FK; actor_user_id FK nullable<br/>from_confidence nullable, to_confidence, source<br/>reason_code, reason_note, occurred_at<br/>IDX commitment + occurred_at; to_confidence + occurred_at"]
+        confidence_recovery_requests["confidence_recovery_requests<br/>PK id<br/>commitment_id FK; commitment_version_id FK<br/>status, recovery_reason<br/>requested_by FK; reviewed_by FK nullable<br/>requested_at, reviewed_at, review_reason<br/>IDX commitment + status; requested_by + status"]
+    end
+
+    subgraph fallback["Fallback recovery"]
+        fallback_requests["fallback_requests<br/>PK id<br/>forecast_id FK; requester_organization_id FK; unit_id FK<br/>requested_volume, response_deadline_at, status, broadcast_note<br/>created_by FK; submitted_by FK nullable; reviewed_by FK nullable<br/>submitted_at, reviewed_at, review_reason, opened_at<br/>fulfilled_at, cancelled_at, cancellation_reason, expired_at<br/>IDX forecast/status/deadline and requester/status"]
+        fallback_offers["fallback_offers<br/>PK id<br/>fallback_request_id FK; supplier_organization_id FK; unit_id FK<br/>offered_volume, accepted_volume, availability_note, expires_at, status<br/>created_by FK; submitted_by FK nullable; supplier_reviewed_by FK nullable<br/>requester_decided_by FK nullable; withdrawn_by FK nullable<br/>decision timestamps and reasons<br/>IDX request/status/expiry and supplier/status"]
+        fallback_offer_sources["fallback_offer_sources<br/>PK id<br/>fallback_offer_id FK; supply_commitment_id FK<br/>reserved_volume, allocated_volume, released_volume<br/>reserved_at, allocated_at, released_at<br/>UK fallback_offer_id + supply_commitment_id<br/>IDX supply_commitment_id + fallback_offer_id"]
+    end
+
+    subgraph readiness["Readiness, documents, and derived observation"]
+        readiness_requirements["readiness_requirements<br/>PK id<br/>UK requirement_code<br/>readiness_type, label, requirement_scope<br/>applies_to_organization_type, commodity_id FK nullable<br/>is_required, is_active, sort_order, config_json<br/>IDX type/active/order and applicability"]
+        readiness_checklists["readiness_checklists<br/>PK id<br/>forecast_id FK; organization_id FK<br/>readiness_type, forecast_version, version_no<br/>supersedes_checklist_id FK nullable<br/>status, is_current_version<br/>prepared_by FK; submitted_by FK nullable; reviewed_by FK nullable<br/>submitted_at, reviewed_at, review_reason, approved_at<br/>UK forecast + org + type + version_no<br/>PARTIAL UK current forecast + org + type where is_current_version=true"]
+        readiness_items["readiness_items<br/>PK id<br/>readiness_checklist_id FK; requirement_id FK<br/>is_required, is_satisfied, note<br/>document_record_id FK nullable; document_record_revision_no nullable<br/>value_json, updated_by FK<br/>UK checklist_id + requirement_id<br/>IDX requirement_id; document_record_id"]
+        document_records["document_records<br/>PK id<br/>organization_id FK; requirement_id FK; created_by FK<br/>document_name, reference_number, valid_from, expires_at<br/>status, notes, revision_no<br/>IDX organization + status; requirement + status; expires_at"]
+        forecast_observations["forecast_derived_state_observations<br/>PK id<br/>forecast_id FK<br/>forecast_version, demand_target<br/>total_safe_supply nullable, shortfall nullable<br/>ready_for_procurement<br/>contributor_organization_ids JSON<br/>contributor_safe_supply_by_organization JSON nullable<br/>reason_codes JSON, evaluated_at, created_at<br/>IDX forecast_id + evaluated_at + id"]
+        fulfilment_feedbacks["fulfilment_feedbacks<br/>PK id<br/>forecast_id FK; contributor_organization_id FK; unit_id FK; recorded_by FK<br/>planned_volume_snapshot, delivered_volume<br/>fulfilment_date, result, reason_note, recorded_at, created_at<br/>UK forecast_id + contributor_organization_id<br/>IDX contributor_organization_id + fulfilment_date"]
+    end
+
+    subgraph operational_support["Operational support"]
+        notifications["notifications<br/>PK id<br/>recipient_user_id FK<br/>notification_type, priority, title, message<br/>related_entity_type nullable; related_entity_id nullable; NO generic FK<br/>action_url, deduplication_key nullable, read_at, created_at<br/>UK recipient_user_id + deduplication_key<br/>IDX recipient/read/time; related type/id"]
+        audit_logs["audit_logs<br/>PK id<br/>actor_user_id FK nullable; actor_organization_id FK nullable<br/>actor_role_snapshot, source, action<br/>entity_type, entity_id; NO generic entity FK<br/>previous_value_json, new_value_json, reason_note, occurred_at<br/>IDX entity type/id/time; actor/time"]
+    end
+
+    organizations -->|"users.organization_id RESTRICT"| users
+    units -->|"commodities.default_unit_id RESTRICT"| commodities
+    organizations -->|"sppg_organization_id RESTRICT"| supply_network_links
+    organizations -->|"kdkmp_organization_id RESTRICT"| supply_network_links
+    users -->|"configured_by RESTRICT"| supply_network_links
+
+    organizations -->|"sppg_organization_id RESTRICT"| demand_forecasts
+    commodities -->|"commodity_id RESTRICT"| demand_forecasts
+    units -->|"unit_id RESTRICT"| demand_forecasts
+    users -->|"created_by RESTRICT"| demand_forecasts
+    users -->|"updated_by RESTRICT"| demand_forecasts
+
+    organizations -->|"organization_id RESTRICT"| producers
+    users -->|"created_by RESTRICT"| producers
+    organizations -->|"organization_id RESTRICT"| expected_harvests
+    producers -->|"producer_id RESTRICT"| expected_harvests
+    commodities -->|"commodity_id RESTRICT"| expected_harvests
+    units -->|"unit_id RESTRICT"| expected_harvests
+    users -->|"last_updated_by RESTRICT"| expected_harvests
+
+    demand_forecasts -->|"forecast_id RESTRICT"| supply_commitments
+    organizations -->|"organization_id RESTRICT"| supply_commitments
+    producers -->|"producer_id RESTRICT"| supply_commitments
+    expected_harvests -->|"expected_harvest_id nullable RESTRICT"| supply_commitments
+    commodities -->|"commodity_id RESTRICT"| supply_commitments
+    users -->|"created_by RESTRICT"| supply_commitments
+    commitment_versions -->|"active_version_id nullable RESTRICT"| supply_commitments
+
+    supply_commitments -->|"commitment_id RESTRICT"| commitment_versions
+    units -->|"unit_id RESTRICT"| commitment_versions
+    users -->|"created_by RESTRICT"| commitment_versions
+    users -->|"submitted_by nullable RESTRICT"| commitment_versions
+    users -->|"reviewed_by nullable RESTRICT"| commitment_versions
+
+    supply_commitments -->|"commitment_id RESTRICT"| commitment_confidence_events
+    users -->|"actor_user_id nullable RESTRICT"| commitment_confidence_events
+    supply_commitments -->|"commitment_id RESTRICT"| confidence_recovery_requests
+    commitment_versions -->|"commitment_version_id RESTRICT"| confidence_recovery_requests
+    users -->|"requested_by RESTRICT"| confidence_recovery_requests
+    users -->|"reviewed_by nullable RESTRICT"| confidence_recovery_requests
+
+    demand_forecasts -->|"forecast_id RESTRICT"| fallback_requests
+    organizations -->|"requester_organization_id RESTRICT"| fallback_requests
+    units -->|"unit_id RESTRICT"| fallback_requests
+    users -->|"created_by RESTRICT"| fallback_requests
+    users -->|"submitted_by nullable RESTRICT"| fallback_requests
+    users -->|"reviewed_by nullable RESTRICT"| fallback_requests
+
+    fallback_requests -->|"fallback_request_id RESTRICT"| fallback_offers
+    organizations -->|"supplier_organization_id RESTRICT"| fallback_offers
+    units -->|"unit_id RESTRICT"| fallback_offers
+    users -->|"created_by RESTRICT"| fallback_offers
+    users -->|"submitted_by nullable RESTRICT"| fallback_offers
+    users -->|"supplier_reviewed_by nullable RESTRICT"| fallback_offers
+    users -->|"requester_decided_by nullable RESTRICT"| fallback_offers
+    users -->|"withdrawn_by nullable RESTRICT"| fallback_offers
+    fallback_offers -->|"fallback_offer_id RESTRICT"| fallback_offer_sources
+    supply_commitments -->|"supply_commitment_id RESTRICT"| fallback_offer_sources
+
+    commodities -->|"commodity_id nullable RESTRICT"| readiness_requirements
+    demand_forecasts -->|"forecast_id RESTRICT"| readiness_checklists
+    organizations -->|"organization_id RESTRICT"| readiness_checklists
+    readiness_checklists -->|"supersedes_checklist_id nullable RESTRICT"| readiness_checklists
+    users -->|"prepared_by RESTRICT"| readiness_checklists
+    users -->|"submitted_by nullable RESTRICT"| readiness_checklists
+    users -->|"reviewed_by nullable RESTRICT"| readiness_checklists
+    readiness_checklists -->|"readiness_checklist_id RESTRICT"| readiness_items
+    readiness_requirements -->|"requirement_id RESTRICT"| readiness_items
+    users -->|"updated_by RESTRICT"| readiness_items
+    organizations -->|"organization_id RESTRICT"| document_records
+    readiness_requirements -->|"requirement_id RESTRICT"| document_records
+    users -->|"created_by RESTRICT"| document_records
+    document_records -->|"document_record_id nullable RESTRICT"| readiness_items
+
+    users -->|"recipient_user_id CASCADE"| notifications
+    users -->|"actor_user_id nullable SET NULL"| audit_logs
+    organizations -->|"actor_organization_id nullable SET NULL"| audit_logs
+    demand_forecasts -->|"forecast_id RESTRICT"| forecast_observations
+    demand_forecasts -->|"forecast_id RESTRICT"| fulfilment_feedbacks
+    organizations -->|"contributor_organization_id RESTRICT"| fulfilment_feedbacks
+    units -->|"unit_id RESTRICT"| fulfilment_feedbacks
+    users -->|"recorded_by RESTRICT"| fulfilment_feedbacks

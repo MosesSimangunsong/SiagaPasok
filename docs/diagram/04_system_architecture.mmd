@@ -1,0 +1,96 @@
+%% SiagaPasok current application architecture
+%% No external API, Redis service, S3, or microservice is shown because none is repository-verified.
+flowchart TB
+    subgraph actors["Authenticated actors"]
+        admin["System Admin"]
+        sppg["SPPG User"]
+        operator["KDKMP Operator"]
+        manager["KDKMP Manager"]
+    end
+
+    browser["Web Browser"]
+
+    subgraph frontend["Frontend - resources/js"]
+        inertia_react["@inertiajs/react"]
+        pages["React Inertia Pages"]
+        layouts["Role-aware Layouts / AppShell"]
+        components["Reusable UI Components"]
+    end
+
+    subgraph laravel["Laravel application"]
+        inertia_laravel["Inertia Laravel Adapter"]
+        routes["routes/web.php"]
+        middleware["Middleware<br/>auth + active.account + role + demo"]
+        controllers["HTTP Controllers"]
+        requests["Form Requests / Validation"]
+        policies["Policies / Authorization"]
+
+        subgraph services["Application and domain services"]
+            forecast_svc["Forecast services"]
+            commitment_svc["Commitment / Confidence services"]
+            supply_svc["SupplyMetricsService"]
+            fallback_svc["Fallback Request / Offer / Reservation services"]
+            readiness_svc["Readiness / RFP services"]
+            fulfilment_svc["Fulfilment services"]
+            notification_svc["Operational Notification services"]
+            audit_svc["AuditService"]
+            demo_svc["Demo services"]
+        end
+
+        models["Eloquent Models"]
+        queue["Laravel queue runtime<br/>database driver configured"]
+    end
+
+    db[("PostgreSQL<br/>domain data + database session/cache/queue tables")]
+
+    admin --> browser
+    sppg --> browser
+    operator --> browser
+    manager --> browser
+
+    browser <--> inertia_react
+    inertia_react --> pages
+    pages --> layouts
+    pages --> components
+    inertia_react <--> inertia_laravel
+
+    inertia_laravel --> routes
+    routes --> middleware
+    middleware --> controllers
+    controllers --> requests
+    controllers --> policies
+
+    controllers --> forecast_svc
+    controllers --> commitment_svc
+    controllers --> fallback_svc
+    controllers --> readiness_svc
+    controllers --> fulfilment_svc
+    controllers --> demo_svc
+
+    forecast_svc --> supply_svc
+    commitment_svc --> supply_svc
+    fallback_svc --> supply_svc
+    readiness_svc --> supply_svc
+    readiness_svc --> notification_svc
+    forecast_svc --> notification_svc
+    commitment_svc --> notification_svc
+    fallback_svc --> notification_svc
+
+    forecast_svc --> audit_svc
+    commitment_svc --> audit_svc
+    fallback_svc --> audit_svc
+    readiness_svc --> audit_svc
+    fulfilment_svc --> audit_svc
+    demo_svc --> models
+
+    forecast_svc --> models
+    commitment_svc --> models
+    supply_svc --> models
+    fallback_svc --> models
+    readiness_svc --> models
+    fulfilment_svc --> models
+    notification_svc --> models
+    audit_svc --> models
+
+    models <--> db
+    queue <--> db

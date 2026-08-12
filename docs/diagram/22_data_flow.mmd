@@ -1,0 +1,43 @@
+%% Implemented request-to-persistence-to-derived-state data flow
+flowchart TD
+    actor["Authenticated actor"]
+    browser["React/Inertia form or action"]
+    route["routes/web.php"]
+    middleware["auth + active.account + role<br/>+ demo guard where applicable"]
+    controller["Controller"]
+    request["Form Request / input validation"]
+    policy["Policy / resource authorization"]
+    service["Domain/Application Service"]
+    tx{"Critical multi-row mutation?"}
+    transaction["DB::transaction + lockForUpdate<br/>when required"]
+    model["Eloquent Models"]
+    postgres[("PostgreSQL")]
+    audit["AuditService"]
+    notification["OperationalNotificationService"]
+    derive["Derived evaluation services<br/>SupplyMetrics / Readiness / RFP"]
+    observation["Append-only ForecastDerivedStateObservation<br/>when observation is required"]
+    inertia["Inertia response / redirect / shared props"]
+    ui["React read model / UI"]
+
+    actor --> browser --> route --> middleware --> controller
+    controller --> request
+    controller --> policy
+    request --> service
+    policy --> service
+    service --> tx
+    tx -- Yes --> transaction --> model
+    tx -- No --> model
+    model <--> postgres
+
+    service --> audit --> model
+    service --> notification --> model
+    notification -. "after successful commit where implemented" .-> postgres
+
+    postgres --> derive
+    derive --> observation --> model
+    derive --> inertia
+    service --> inertia
+    inertia --> ui --> actor
+
+    note1["Derived values are not accepted from client as editable truth:<br/>Safe Supply, At-Risk, Coverage, Shortfall, contributors, Volume Ready, RFP"]
+    derive --- note1

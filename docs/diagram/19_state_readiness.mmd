@@ -1,0 +1,29 @@
+%% ReadinessChecklist approval lifecycle and version semantics
+stateDiagram-v2
+    [*] --> DRAFT : prepare checklist / create revision
+    DRAFT --> DRAFT : Operator update items
+    DRAFT --> PENDING_APPROVAL : submit after all required checks pass
+    PENDING_APPROVAL --> APPROVED : Manager approve
+    PENDING_APPROVAL --> REJECTED : Manager reject with reason
+
+    REJECTED --> DRAFT : new version supersedes prior checklist
+    APPROVED --> DRAFT : new version when checklist must be revised
+
+    state "DRAFT" as DRAFT
+    state "PENDING_APPROVAL" as PENDING_APPROVAL
+    state "APPROVED" as APPROVED
+    state "REJECTED" as REJECTED
+
+    note right of APPROVED
+        Approval alone is not sufficient forever.
+        ReadinessEvaluationService also validates:
+        current checklist version,
+        Forecast version snapshot,
+        effective contributor status,
+        and document revision/status for DOCUMENT readiness.
+    end note
+
+    note right of DRAFT
+        Each new revision is a new checklist version.
+        The prior row remains immutable history and is_current_version=false.
+    end note

@@ -1,0 +1,350 @@
+%% SiagaPasok current-state domain ERD
+%% Evidence basis: database/migrations + app/Models
+%% Physical infrastructure tables are detailed in 02_database_schema.mmd.
+erDiagram
+    organizations {
+        bigint id PK
+        string code UK
+        string name
+        string organization_type
+        boolean is_active
+        string general_location
+    }
+
+    users {
+        bigint id PK
+        bigint organization_id FK
+        string name
+        string email UK
+        string role
+        boolean is_active
+        datetime last_login_at
+    }
+
+    units {
+        bigint id PK
+        string code UK
+        string name
+        string symbol
+        int decimal_precision
+        boolean is_active
+    }
+
+    commodities {
+        bigint id PK
+        string code UK
+        string name
+        bigint default_unit_id FK
+        string harvest_behavior
+        boolean is_active
+    }
+
+    supply_network_links {
+        bigint id PK
+        bigint sppg_organization_id FK
+        bigint kdkmp_organization_id FK
+        string network_role
+        boolean is_active
+        bigint configured_by FK
+    }
+
+    demand_forecasts {
+        bigint id PK
+        bigint sppg_organization_id FK
+        bigint commodity_id FK
+        bigint unit_id FK
+        string forecast_code UK
+        decimal target_volume
+        datetime required_start_at
+        datetime required_end_at
+        string status
+        int version
+        bigint created_by FK
+        bigint updated_by FK
+    }
+
+    producers {
+        bigint id PK
+        bigint organization_id FK
+        string producer_code
+        string name
+        string village
+        string district
+        boolean is_active
+        bigint created_by FK
+    }
+
+    expected_harvests {
+        bigint id PK
+        bigint organization_id FK
+        bigint producer_id FK
+        bigint commodity_id FK
+        bigint unit_id FK
+        decimal expected_min_volume
+        decimal expected_max_volume
+        datetime harvest_start_at
+        datetime harvest_end_at
+        bigint last_updated_by FK
+    }
+
+    supply_commitments {
+        bigint id PK
+        bigint forecast_id FK
+        bigint organization_id FK
+        bigint producer_id FK
+        bigint expected_harvest_id FK
+        bigint commodity_id FK
+        bigint active_version_id FK
+        string lifecycle_status
+        string current_confidence
+        datetime last_confidence_verified_at
+        bigint created_by FK
+    }
+
+    commitment_versions {
+        bigint id PK
+        bigint commitment_id FK
+        int version_no
+        decimal min_volume
+        decimal max_volume
+        bigint unit_id FK
+        datetime availability_start_at
+        datetime availability_end_at
+        string approval_status
+        bigint created_by FK
+        bigint submitted_by FK
+        bigint reviewed_by FK
+        datetime approved_at
+    }
+
+    commitment_confidence_events {
+        bigint id PK
+        bigint commitment_id FK
+        string from_confidence
+        string to_confidence
+        string source
+        string reason_code
+        bigint actor_user_id FK
+        datetime occurred_at
+    }
+
+    confidence_recovery_requests {
+        bigint id PK
+        bigint commitment_id FK
+        bigint commitment_version_id FK
+        string status
+        string recovery_reason
+        bigint requested_by FK
+        bigint reviewed_by FK
+        datetime requested_at
+        datetime reviewed_at
+    }
+
+    fallback_requests {
+        bigint id PK
+        bigint forecast_id FK
+        bigint requester_organization_id FK
+        decimal requested_volume
+        bigint unit_id FK
+        datetime response_deadline_at
+        string status
+        bigint created_by FK
+        bigint submitted_by FK
+        bigint reviewed_by FK
+    }
+
+    fallback_offers {
+        bigint id PK
+        bigint fallback_request_id FK
+        bigint supplier_organization_id FK
+        decimal offered_volume
+        decimal accepted_volume
+        bigint unit_id FK
+        datetime expires_at
+        string status
+        bigint created_by FK
+        bigint submitted_by FK
+        bigint supplier_reviewed_by FK
+        bigint requester_decided_by FK
+        bigint withdrawn_by FK
+    }
+
+    fallback_offer_sources {
+        bigint id PK
+        bigint fallback_offer_id FK
+        bigint supply_commitment_id FK
+        decimal reserved_volume
+        decimal allocated_volume
+        decimal released_volume
+        datetime reserved_at
+        datetime allocated_at
+        datetime released_at
+    }
+
+    readiness_requirements {
+        bigint id PK
+        string readiness_type
+        string requirement_code UK
+        string label
+        string requirement_scope
+        string applies_to_organization_type
+        bigint commodity_id FK
+        boolean is_required
+        boolean is_active
+        int sort_order
+        json config_json
+    }
+
+    readiness_checklists {
+        bigint id PK
+        bigint forecast_id FK
+        bigint organization_id FK
+        string readiness_type
+        int forecast_version
+        int version_no
+        bigint supersedes_checklist_id FK
+        string status
+        boolean is_current_version
+        bigint prepared_by FK
+        bigint submitted_by FK
+        bigint reviewed_by FK
+        datetime approved_at
+    }
+
+    document_records {
+        bigint id PK
+        bigint organization_id FK
+        bigint requirement_id FK
+        string document_name
+        string reference_number
+        datetime valid_from
+        datetime expires_at
+        string status
+        int revision_no
+        bigint created_by FK
+    }
+
+    readiness_items {
+        bigint id PK
+        bigint readiness_checklist_id FK
+        bigint requirement_id FK
+        boolean is_required
+        boolean is_satisfied
+        bigint document_record_id FK
+        int document_record_revision_no
+        json value_json
+        bigint updated_by FK
+    }
+
+    notifications {
+        bigint id PK
+        bigint recipient_user_id FK
+        string notification_type
+        string priority
+        string title
+        string related_entity_type
+        bigint related_entity_id
+        string deduplication_key
+        datetime read_at
+        datetime created_at
+    }
+
+    audit_logs {
+        bigint id PK
+        bigint actor_user_id FK
+        string actor_role_snapshot
+        bigint actor_organization_id FK
+        string source
+        string action
+        string entity_type
+        bigint entity_id
+        json previous_value_json
+        json new_value_json
+        datetime occurred_at
+    }
+
+    forecast_derived_state_observations {
+        bigint id PK
+        bigint forecast_id FK
+        int forecast_version
+        decimal demand_target
+        decimal total_safe_supply
+        decimal shortfall
+        boolean ready_for_procurement
+        json contributor_organization_ids
+        json contributor_safe_supply_by_organization
+        json reason_codes
+        datetime evaluated_at
+    }
+
+    fulfilment_feedbacks {
+        bigint id PK
+        bigint forecast_id FK
+        bigint contributor_organization_id FK
+        bigint unit_id FK
+        decimal planned_volume_snapshot
+        decimal delivered_volume
+        datetime fulfilment_date
+        string result
+        bigint recorded_by FK
+        datetime recorded_at
+    }
+
+    organizations o|--o{ users : "organization membership"
+    organizations ||--o{ producers : owns
+    organizations ||--o{ supply_network_links : "SPPG endpoint"
+    organizations ||--o{ supply_network_links : "KDKMP endpoint"
+    users ||--o{ supply_network_links : configures
+
+    units ||--o{ commodities : "default unit"
+    organizations ||--o{ demand_forecasts : "SPPG owns"
+    commodities ||--o{ demand_forecasts : forecasts
+    units ||--o{ demand_forecasts : measures
+
+    organizations ||--o{ producers : scopes
+    producers ||--o{ expected_harvests : has
+    organizations ||--o{ expected_harvests : scopes
+    commodities ||--o{ expected_harvests : categorizes
+    units ||--o{ expected_harvests : measures
+
+    demand_forecasts ||--o{ supply_commitments : receives
+    organizations ||--o{ supply_commitments : contributes
+    producers ||--o{ supply_commitments : supplies
+    expected_harvests o|--o{ supply_commitments : "may support"
+    commodities ||--o{ supply_commitments : categorizes
+
+    supply_commitments ||--|{ commitment_versions : versions
+    units ||--o{ commitment_versions : measures
+    commitment_versions o|--o{ supply_commitments : "active_version_id pointer"
+    supply_commitments ||--o{ commitment_confidence_events : records
+    supply_commitments ||--o{ confidence_recovery_requests : recovery
+    commitment_versions ||--o{ confidence_recovery_requests : snapshots
+
+    demand_forecasts ||--o{ fallback_requests : shortage_requests
+    organizations ||--o{ fallback_requests : requester
+    units ||--o{ fallback_requests : measures
+    fallback_requests ||--o{ fallback_offers : receives
+    organizations ||--o{ fallback_offers : supplier
+    units ||--o{ fallback_offers : measures
+    fallback_offers ||--|{ fallback_offer_sources : sources
+    supply_commitments ||--o{ fallback_offer_sources : backs
+
+    commodities o|--o{ readiness_requirements : "optional commodity scope"
+    demand_forecasts ||--o{ readiness_checklists : evaluates
+    organizations ||--o{ readiness_checklists : contributor
+    readiness_checklists o|--o{ readiness_checklists : supersedes
+    readiness_checklists ||--|{ readiness_items : contains
+    readiness_requirements ||--o{ readiness_items : instantiates
+    organizations ||--o{ document_records : owns
+    readiness_requirements ||--o{ document_records : supports
+    document_records o|--o{ readiness_items : "optional evidence"
+
+    users ||--o{ notifications : receives
+    users o|--o{ audit_logs : acts
+    organizations o|--o{ audit_logs : actor_scope
+
+    demand_forecasts ||--o{ forecast_derived_state_observations : snapshots
+    demand_forecasts ||--o{ fulfilment_feedbacks : feedback
+    organizations ||--o{ fulfilment_feedbacks : contributor
+    units ||--o{ fulfilment_feedbacks : measures
+    users ||--o{ fulfilment_feedbacks : records

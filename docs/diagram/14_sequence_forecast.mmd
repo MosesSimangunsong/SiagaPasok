@@ -1,0 +1,67 @@
+%% Demand Forecast sequence through SPPG routes and Forecast service
+sequenceDiagram
+    actor SPPG as SPPG User
+    actor KDKMP as KDKMP User
+    participant UI as React/Inertia UI
+    participant Route as routes/web.php + auth/role middleware
+    participant C as DemandForecastController
+    participant KC as KDKMP ForecastController
+    participant Action as DemandForecastActionController
+    participant Policy as DemandForecastPolicy
+    participant S as DemandForecastService
+    participant Readiness as Readiness records / invalidation logic
+    participant Support as Audit / Notification / Derived Observation
+    participant DB as PostgreSQL
+
+    SPPG->>UI: Enter Forecast payload
+    UI->>Route: POST /sppg/forecasts
+    Route->>C: store()
+    C->>Policy: authorize create for SPPG organization
+    C->>S: createDraft command
+    S->>DB: transaction + validate canonical commodity/unit/time
+    S->>DB: INSERT demand_forecasts (DRAFT, version 1)
+    S->>Support: audit
+    S-->>UI: DRAFT Forecast
+
+    SPPG->>UI: Publish Forecast
+    UI->>Route: POST /sppg/forecasts/{forecast}/publish
+    Route->>Action: publish()
+    Action->>Policy: authorize owner SPPG
+    Action->>S: publish command
+    S->>DB: lock Forecast
+    S->>DB: verify active PRIMARY supply-network relationship
+    S->>DB: UPDATE status=PUBLISHED, published_at, version++
+    S->>Support: audit + derived observation after commit
+    S-->>UI: published Forecast
+
+    KDKMP->>UI: View published Forecast
+    UI->>Route: GET /kdkmp/forecasts/{forecast}
+    Route->>KC: show()
+    KC->>Policy: authorize read-only KDKMP visibility
+    KC->>DB: read Forecast and allowed aggregate context
+    KC-->>UI: read-only Inertia page
+
+    SPPG->>UI: Revise published Forecast
+    UI->>Route: POST /sppg/forecasts/{forecast}/revise
+    Route->>Action: revise()
+    Action->>Policy: authorize owner SPPG
+    Action->>S: revisePublished command
+    S->>DB: lock Forecast + optimistic version validation
+    S->>DB: UPDATE payload + version++
+    S->>Readiness: invalidate/mark stale previous approved readiness when required
+    Readiness->>DB: persist legitimate readiness invalidation/revision effects
+    S->>Support: audit + notifications + new derived observation
+    S-->>UI: revised PUBLISHED Forecast
+
+    alt Close
+        SPPG->>Route: POST /sppg/forecasts/{forecast}/close
+        Route->>Action: close()
+        Action->>S: close command
+        S->>DB: UPDATE PUBLISHED -> CLOSED
+    else Cancel
+        SPPG->>Route: POST /sppg/forecasts/{forecast}/cancel
+        Route->>Action: cancel()
+        Action->>S: cancel command
+        S->>DB: reject if accepted fallback allocation prevents cancellation
+        S->>DB: otherwise UPDATE DRAFT/PUBLISHED -> CANCELLED
+    end

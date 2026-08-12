@@ -1,0 +1,125 @@
+%% Current component architecture mapped to repository directories and major implemented services
+flowchart LR
+    subgraph client["Client"]
+        browser["Browser"]
+    end
+
+    subgraph frontend["resources/js"]
+        appjsx["app.jsx<br/>createInertiaApp"]
+        layouts["Layouts<br/>AppShell / role layouts"]
+        pages_admin["Pages/Admin"]
+        pages_sppg["Pages/Sppg"]
+        pages_kdkmp["Pages/Kdkmp"]
+        pages_auth["Pages/Auth"]
+        pages_notif["Pages/Notifications"]
+        ui["components"]
+    end
+
+    subgraph http["app/Http"]
+        routes["routes/web.php"]
+        middleware["Middleware<br/>HandleInertiaRequests<br/>EnsureActiveAccount<br/>EnsureRole<br/>EnsureDemoMode"]
+        auth_c["Auth Controller"]
+        admin_c["Admin Controllers"]
+        sppg_c["SPPG Controllers"]
+        kdkmp_c["KDKMP Controllers"]
+        demo_c["Demo Controllers"]
+        notification_c["NotificationController"]
+        requests["Form Requests"]
+    end
+
+    subgraph authorization["Authorization"]
+        policies["app/Policies<br/>12 resource policies"]
+    end
+
+    subgraph services["app/Services"]
+        audit["Audit"]
+        commitment["Commitment"]
+        dashboard["Dashboard"]
+        demo["Demo"]
+        fallback["Fallback"]
+        forecast["Forecast"]
+        fulfilment["Fulfilment"]
+        notification["Notification"]
+        readiness["Readiness"]
+        supply["Supply"]
+    end
+
+    subgraph domain["Domain persistence"]
+        enums["app/Enums"]
+        models["app/Models<br/>23 Eloquent models"]
+        migrations["database/migrations"]
+        seeders["database/seeders"]
+        db[("PostgreSQL")]
+    end
+
+    browser <--> appjsx
+    appjsx --> layouts
+    appjsx --> pages_admin
+    appjsx --> pages_sppg
+    appjsx --> pages_kdkmp
+    appjsx --> pages_auth
+    appjsx --> pages_notif
+    layouts --> ui
+    pages_admin --> ui
+    pages_sppg --> ui
+    pages_kdkmp --> ui
+
+    appjsx <--> routes
+    routes --> middleware
+    middleware --> auth_c
+    middleware --> admin_c
+    middleware --> sppg_c
+    middleware --> kdkmp_c
+    middleware --> demo_c
+    middleware --> notification_c
+
+    admin_c --> requests
+    sppg_c --> requests
+    kdkmp_c --> requests
+    demo_c --> requests
+    admin_c --> policies
+    sppg_c --> policies
+    kdkmp_c --> policies
+
+    admin_c --> models
+    sppg_c --> forecast
+    sppg_c --> fulfilment
+    kdkmp_c --> commitment
+    kdkmp_c --> fallback
+    kdkmp_c --> readiness
+    kdkmp_c --> fulfilment
+    demo_c --> demo
+    notification_c --> notification
+
+    forecast --> supply
+    commitment --> supply
+    fallback --> supply
+    readiness --> supply
+    forecast --> audit
+    commitment --> audit
+    fallback --> audit
+    readiness --> audit
+    fulfilment --> audit
+    forecast --> notification
+    commitment --> notification
+    fallback --> notification
+    readiness --> notification
+    dashboard --> supply
+    demo --> commitment
+    demo --> fallback
+    demo --> readiness
+
+    audit --> models
+    commitment --> models
+    dashboard --> models
+    demo --> models
+    fallback --> models
+    forecast --> models
+    fulfilment --> models
+    notification --> models
+    readiness --> models
+    supply --> models
+    models --> enums
+    models <--> db
+    migrations --> db
+    seeders --> models
